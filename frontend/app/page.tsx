@@ -36,6 +36,128 @@ const getAgentColor = (name: string) => {
   return agentColors[name] || { bg: "bg-gray-500/20", text: "text-gray-400", glow: "shadow-gray-500/20" };
 };
 
+// Section configuration for synthesis parsing
+const sectionConfig = [
+  { key: "Synthesis", icon: "📋", color: "text-indigo-400", bgColor: "bg-indigo-500/10" },
+  { key: "Points of Agreement", icon: "🤝", color: "text-emerald-400", bgColor: "bg-emerald-500/10" },
+  { key: "Points of Contention", icon: "⚔️", color: "text-amber-400", bgColor: "bg-amber-500/10" },
+  { key: "Key Insights", icon: "💡", color: "text-blue-400", bgColor: "bg-blue-500/10" },
+  { key: "Conclusion", icon: "🎯", color: "text-purple-400", bgColor: "bg-purple-500/10" },
+  { key: "Confidence", icon: "📊", color: "text-pink-400", bgColor: "bg-pink-500/10" },
+];
+
+// Clean up markdown formatting from text
+const cleanMarkdown = (text: string): string => {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, "$1") // Remove bold markers **text**
+    .replace(/^:\s*/, "") // Remove leading colons
+    .trim();
+};
+
+// Parse content into bullet points if it contains * markers
+const parseContentIntoBullets = (content: string): string[] => {
+  // Split by bullet pattern: newline or start followed by * and space
+  // This handles: "* item1 * item2" and "* item1\n* item2"
+  const bulletPattern = /(?:^|\n)\s*\*\s+/;
+  
+  // Check if content has bullet-like structure
+  if (!content.includes("* ")) {
+    // No bullets, return cleaned content as single item
+    return [cleanMarkdown(content)];
+  }
+  
+  // Split content by bullet markers, handling both inline and newline bullets
+  // First normalize: replace " * " with "\n* " for consistent splitting
+  const normalized = content.replace(/\s+\*\s+/g, "\n* ");
+  const parts = normalized.split(bulletPattern).filter(p => p.trim());
+  
+  if (parts.length > 1) {
+    return parts.map(p => cleanMarkdown(p));
+  }
+  
+  // Fallback: return cleaned content as single item
+  return [cleanMarkdown(content)];
+};
+
+// Parse synthesis message into structured sections
+const parseSynthesis = (message: string) => {
+  const sections: { title: string; content: string[]; icon: string; color: string; bgColor: string }[] = [];
+  
+  // Build regex to find all sections
+  const sectionKeys = sectionConfig.map(s => s.key).join("|");
+  const sectionRegex = new RegExp(`\\*\\*(${sectionKeys}):?\\*\\*`, "gi");
+  
+  // Find all section positions
+  const sectionMatches: { key: string; index: number; endIndex: number }[] = [];
+  let match;
+  
+  while ((match = sectionRegex.exec(message)) !== null) {
+    sectionMatches.push({
+      key: match[1],
+      index: match.index,
+      endIndex: match.index + match[0].length,
+    });
+  }
+  
+  // Extract content for each section
+  for (let i = 0; i < sectionMatches.length; i++) {
+    const current = sectionMatches[i];
+    const nextIndex = i + 1 < sectionMatches.length ? sectionMatches[i + 1].index : message.length;
+    const rawContent = message.substring(current.endIndex, nextIndex).trim();
+    
+    const config = sectionConfig.find(s => s.key.toLowerCase() === current.key.toLowerCase());
+    if (config && rawContent) {
+      sections.push({
+        title: config.key,
+        content: parseContentIntoBullets(rawContent),
+        icon: config.icon,
+        color: config.color,
+        bgColor: config.bgColor,
+      });
+    }
+  }
+  
+  return sections;
+};
+
+// Component to render formatted synthesis
+const SynthesisCard = ({ message }: { message: string }) => {
+  const sections = parseSynthesis(message);
+  
+  // If parsing failed, fall back to simple display
+  if (sections.length === 0) {
+    return <p className="text-gray-200 leading-relaxed">{message}</p>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {sections.map((section, idx) => (
+        <div key={idx} className={`rounded-lg p-4 ${section.bgColor}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xl">{section.icon}</span>
+            <h4 className={`font-semibold text-base ${section.color}`}>{section.title}</h4>
+          </div>
+          
+          {section.content.length === 1 ? (
+            <p className="text-gray-300 leading-relaxed text-sm pl-8">
+              {section.content[0]}
+            </p>
+          ) : (
+            <ul className="space-y-2 pl-8">
+              {section.content.map((bullet, bulletIdx) => (
+                <li key={bulletIdx} className="text-gray-300 text-sm leading-relaxed flex items-start gap-2">
+                  <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${section.color.replace('text-', 'bg-')}`} />
+                  <span>{bullet}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // Sample debate topics
 const sampleTopics = [
   "Should developers use AI coding assistants?",
@@ -346,9 +468,15 @@ export default function Home() {
                       </div>
 
                       {/* Message */}
-                      <p className="text-gray-200 leading-relaxed pl-13">
-                        {entry.message}
-                      </p>
+                      {isSynthesis ? (
+                        <div className="mt-4">
+                          <SynthesisCard message={entry.message || ""} />
+                        </div>
+                      ) : (
+                        <p className="text-gray-200 leading-relaxed pl-13">
+                          {entry.message}
+                        </p>
+                      )}
                     </motion.div>
                   );
                 })}
@@ -399,4 +527,3 @@ export default function Home() {
     </main>
   );
 }
-
