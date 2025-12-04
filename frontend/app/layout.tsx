@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Debate Arena",
-  description: "Watch AI agents debate any topic from multiple perspectives",
+  title: "discourse",
+  description: "Multi-agent debate system",
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-arena-bg text-white antialiased font-sans">
+      <body className="bg-black text-white antialiased">
         {children}
       </body>
     </html>

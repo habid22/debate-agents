@@ -2,9 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
 :root {
-  --font-geist: "Geist Sans", system-ui, sans-serif;
-  --font-geist-mono: "Geist Mono", monospace;
+  --font-mono: "IBM Plex Mono", "Geist Mono", monospace;
 }
 
 * {
@@ -18,92 +19,43 @@ body {
   max-width: 100vw;
   overflow-x: hidden;
   scroll-behavior: smooth;
+  font-family: var(--font-mono);
 }
 
 body {
-  background: linear-gradient(
-    135deg,
-    #0a0a0f 0%,
-    #0f0f1a 50%,
-    #0a0a0f 100%
-  );
+  background: #000000;
+  color: #ffffff;
   min-height: 100vh;
 }
 
 /* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #12121a;
+  background: #000000;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2a2a3a;
-  border-radius: 4px;
+  background: #333333;
+  border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a3a4a;
+  background: #444444;
 }
 
-/* Animated gradient background for cards */
-.gradient-border {
-  position: relative;
-  background: #12121a;
-  border-radius: 12px;
+/* Minimal card style */
+.card {
+  background: #0a0a0a;
+  border: 1px solid #1a1a1a;
+  border-radius: 8px;
 }
 
-.gradient-border::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: 13px;
-  padding: 1px;
-  background: linear-gradient(
-    135deg,
-    rgba(99, 102, 241, 0.3),
-    rgba(139, 92, 246, 0.1),
-    rgba(99, 102, 241, 0.3)
-  );
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
-/* Glowing effect for active elements */
-.glow {
-  box-shadow: 0 0 20px rgba(99, 102, 241, 0.3),
-    0 0 40px rgba(99, 102, 241, 0.1);
-}
-
-/* Agent colors */
-.agent-optimist {
-  --agent-color: #22c55e;
-}
-
-.agent-skeptic {
-  --agent-color: #ef4444;
-}
-
-.agent-pragmatist {
-  --agent-color: #3b82f6;
-}
-
-.agent-innovator {
-  --agent-color: #f59e0b;
-}
-
-.agent-veteran {
-  --agent-color: #8b5cf6;
-}
-
-.agent-moderator {
-  --agent-color: #6366f1;
+.card:hover {
+  border-color: #2a2a2a;
 }
 
 /* Typing indicator animation */
@@ -112,7 +64,7 @@ body {
     transform: translateY(0);
   }
   30% {
-    transform: translateY(-4px);
+    transform: translateY(-3px);
   }
 }
 
@@ -128,3 +80,7 @@ body {
   animation-delay: 0.4s;
 }
 
+/* Focus states */
+input:focus, button:focus {
+  outline: none;
+}
