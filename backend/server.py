@@ -38,6 +38,23 @@ class AgentConfig(BaseModel):
     stance: str = Field(default="neutral", description="Agent's stance: pro, con, or neutral")
 
 
+class FollowUpRequest(BaseModel):
+    """Request for a follow-up question to an agent."""
+    topic: str = Field(..., description="The debate topic")
+    agent_template: str = Field(..., description="The agent template to ask")
+    question: str = Field(..., description="The follow-up question")
+    context: list[dict] = Field(default=[], description="Previous debate context")
+
+
+class AgentResponseRequest(BaseModel):
+    """Request for one agent to respond to another."""
+    topic: str = Field(..., description="The debate topic")
+    responder_template: str = Field(..., description="The agent who will respond")
+    target_agent: str = Field(..., description="The agent being responded to")
+    target_message: str = Field(..., description="The message being responded to")
+    context: list[dict] = Field(default=[], description="Previous debate context")
+
+
 class DebateRequest(BaseModel):
     """Request to start a debate."""
     topic: str = Field(..., description="The debate topic")
@@ -192,6 +209,137 @@ async def start_debate_sync(request: DebateRequest):
         "rounds": request.rounds,
         "events": results
     }
+
+
+@app.post("/followup")
+async def follow_up_question(request: FollowUpRequest):
+    """
+    Ask a specific agent a follow-up question.
+    Returns streaming response.
+    """
+    
+    def generate_stream():
+        from agents import get_template_agent
+        
+        try:
+            agent = get_template_agent(request.agent_template)
+        except ValueError as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            return
+        
+        # Build context string
+        context_text = ""
+        if request.context:
+            context_text = "\n\n".join([
+                f"**{c['agent']}** ({c['role']}): {c['message']}"
+                for c in request.context
+            ])
+        
+        prompt = f"""You are **{agent.name}**, a {agent.role}.
+
+## Your Personality
+{agent.personality}
+
+## Debate Topic
+"{request.topic}"
+
+## Previous Discussion
+{context_text if context_text else "(No previous discussion)"}
+
+## Follow-up Question
+Someone has asked you: "{request.question}"
+
+## Your Task
+Answer this follow-up question while staying in character as {agent.name}.
+Be specific and provide additional insight or clarification.
+Keep your response under 100 words.
+
+## Your Response:"""
+        
+        try:
+            import ollama
+            response = ollama.chat(
+                model=agent.model,
+                messages=[{'role': 'user', 'content': prompt}],
+                options={'temperature': 0.8, 'top_p': 0.9}
+            )
+            message = response['message']['content'].strip()
+            
+            yield f"data: {json.dumps({'type': 'followup', 'agent': agent.name, 'role': agent.role, 'message': message, 'question': request.question})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    )
+
+
+@app.post("/respond")
+async def agent_response(request: AgentResponseRequest):
+    """
+    Have one agent directly respond to another agent's argument.
+    Returns streaming response.
+    """
+    
+    def generate_stream():
+        from agents import get_template_agent
+        
+        try:
+            responder = get_template_agent(request.responder_template)
+        except ValueError as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+            return
+        
+        # Build context string
+        context_text = ""
+        if request.context:
+            context_text = "\n\n".join([
+                f"**{c['agent']}** ({c['role']}): {c['message']}"
+                for c in request.context[-5:]  # Last 5 messages for context
+            ])
+        
+        prompt = f"""You are **{responder.name}**, a {responder.role}.
+
+## Your Personality
+{responder.personality}
+
+## Debate Topic
+"{request.topic}"
+
+## Recent Discussion
+{context_text if context_text else "(No previous discussion)"}
+
+## You are responding directly to {request.target_agent} who said:
+"{request.target_message}"
+
+## Your Task
+Respond directly to {request.target_agent}'s argument above.
+Stay in character as {responder.name}.
+Be specific - either support, challenge, or add nuance to their point.
+Keep your response under 100 words.
+
+## Your Response to {request.target_agent}:"""
+        
+        try:
+            import ollama
+            response = ollama.chat(
+                model=responder.model,
+                messages=[{'role': 'user', 'content': prompt}],
+                options={'temperature': 0.8, 'top_p': 0.9}
+            )
+            message = response['message']['content'].strip()
+            
+            yield f"data: {json.dumps({'type': 'response', 'agent': responder.name, 'role': responder.role, 'message': message, 'responding_to': request.target_agent})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    )
 
 
 # Run with: uvicorn server:app --reload --port 8000
