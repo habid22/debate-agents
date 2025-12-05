@@ -91,6 +91,8 @@ const cleanMarkdown = (text: string): string => {
   return text
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/^:\s*/, "")
+    // Remove numbered prefixes like "1. ", "2. ", etc.
+    .replace(/^\d+\.\s+/, "")
     .trim();
 };
 
@@ -110,23 +112,33 @@ const cleanAgentMessage = (message: string): string => {
 const parseContentIntoBullets = (content: string): string[] => {
   const bulletPattern = /(?:^|\n)\s*\*\s+/;
   
-  if (!content.includes("* ")) {
-    return [cleanMarkdown(content)];
+  // Remove numbered prefixes from the entire content first
+  let cleaned = content.replace(/^\d+\.\s+/gm, "").trim();
+  
+  if (!cleaned.includes("* ")) {
+    return [cleanMarkdown(cleaned)];
   }
   
-  const normalized = content.replace(/\s+\*\s+/g, "\n* ");
+  const normalized = cleaned.replace(/\s+\*\s+/g, "\n* ");
   const parts = normalized.split(bulletPattern).filter(p => p.trim());
   
   if (parts.length > 1) {
     return parts.map(p => cleanMarkdown(p));
   }
   
-  return [cleanMarkdown(content)];
+  return [cleanMarkdown(cleaned)];
 };
 
 // Parse synthesis message into structured sections
 const parseSynthesis = (message: string) => {
   const sections: { title: string; content: string[]; icon: string; color: string; borderColor: string }[] = [];
+  
+  // Clean the message: remove trailing numbers and unwanted text
+  let cleanedMessage = message
+    .replace(/\n\s*\d+\s*$/g, "") // Remove trailing numbers on their own line
+    .replace(/\s+\d+\s*$/g, "") // Remove trailing numbers at end of text
+    .replace(/There is no more synthesis\.?\s*/gi, "") // Remove "There is no more synthesis" text
+    .trim();
   
   const sectionKeys = sectionConfig.map(s => s.key).join("|");
   const sectionRegex = new RegExp(`\\*\\*(${sectionKeys}):?\\*\\*`, "gi");
@@ -134,7 +146,7 @@ const parseSynthesis = (message: string) => {
   const sectionMatches: { key: string; index: number; endIndex: number }[] = [];
   let match;
   
-  while ((match = sectionRegex.exec(message)) !== null) {
+  while ((match = sectionRegex.exec(cleanedMessage)) !== null) {
     sectionMatches.push({
       key: match[1],
       index: match.index,
@@ -144,8 +156,8 @@ const parseSynthesis = (message: string) => {
   
   for (let i = 0; i < sectionMatches.length; i++) {
     const current = sectionMatches[i];
-    const nextIndex = i + 1 < sectionMatches.length ? sectionMatches[i + 1].index : message.length;
-    const rawContent = message.substring(current.endIndex, nextIndex).trim();
+    const nextIndex = i + 1 < sectionMatches.length ? sectionMatches[i + 1].index : cleanedMessage.length;
+    const rawContent = cleanedMessage.substring(current.endIndex, nextIndex).trim();
     
     const config = sectionConfig.find(s => s.key.toLowerCase() === current.key.toLowerCase());
     if (config && rawContent) {
@@ -362,7 +374,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentRound, setCurrentRound] = useState<number>(0);
-  const [selectedTemplates, setSelectedTemplates] = useState<string[]>(["optimist", "skeptic", "pragmatist"]);
+  const [selectedTemplates, setSelectedTemplates] = useState<string[]>([]);
   const [rounds, setRounds] = useState(2);
   const [collapsedMessages, setCollapsedMessages] = useState<Set<number>>(new Set());
   const [savedDebates, setSavedDebates] = useState<SavedDebate[]>([]);
