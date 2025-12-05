@@ -86,6 +86,24 @@ class DebateArena:
                 # Yield for real-time streaming
                 yield entry
         
+        # Voting round
+        yield {
+            "type": "voting_start",
+            "message": "The debate has concluded. Each philosopher will now vote for the argument they found most compelling."
+        }
+        
+        votes = self._run_voting_round()
+        for vote_entry in votes:
+            yield vote_entry
+        
+        # Tally and announce results
+        vote_tally = self._tally_votes(votes)
+        yield {
+            "type": "voting_results",
+            "tally": vote_tally,
+            "message": self._format_voting_results(vote_tally)
+        }
+        
         # Generate final synthesis
         synthesis = self._generate_synthesis()
         yield {
@@ -103,6 +121,62 @@ class DebateArena:
         }
         
         self.is_running = False
+    
+    def _run_voting_round(self) -> list:
+        """Run a voting round where each agent votes for the most compelling argument."""
+        votes = []
+        agent_names = [agent.name for agent in self.agents]
+        
+        for agent in self.agents:
+            vote_result = agent.generate_vote(
+                topic=self.topic,
+                debate_history=self.history,
+                other_agents=agent_names
+            )
+            
+            vote_entry = {
+                "type": "vote",
+                "voter": vote_result['voter'],
+                "vote_for": vote_result['vote'],
+                "reason": vote_result['reason']
+            }
+            votes.append(vote_entry)
+        
+        return votes
+    
+    def _tally_votes(self, votes: list) -> dict:
+        """Tally the votes and return counts."""
+        tally = {}
+        for vote in votes:
+            vote_for = vote.get('vote_for')
+            if vote_for:
+                tally[vote_for] = tally.get(vote_for, 0) + 1
+        return tally
+    
+    def _format_voting_results(self, tally: dict) -> str:
+        """Format voting results as a readable message."""
+        if not tally:
+            return "No votes were cast."
+        
+        # Sort by vote count
+        sorted_results = sorted(tally.items(), key=lambda x: x[1], reverse=True)
+        
+        # Find winner(s)
+        max_votes = sorted_results[0][1]
+        winners = [name for name, count in sorted_results if count == max_votes]
+        
+        # Build message
+        lines = ["**Voting Results:**"]
+        for name, count in sorted_results:
+            vote_word = "vote" if count == 1 else "votes"
+            lines.append(f"- {name}: {count} {vote_word}")
+        
+        if len(winners) == 1:
+            lines.append(f"\n**Winner:** {winners[0]} received the most votes!")
+        else:
+            lines.append(f"\n**Tie:** {' and '.join(winners)} tied for the most votes!")
+        
+        return "\n".join(lines)
     
     def _generate_synthesis(self) -> str:
         """Generate a synthesis of the debate."""
@@ -126,19 +200,27 @@ class DebateArena:
 {all_arguments}
 
 ## Your Task
-Provide a balanced synthesis of this debate. Include:
+Provide a balanced synthesis of this debate. You MUST format your response with these exact section headers (use bold markdown):
 
-1. **Points of Agreement**: What did the debaters agree on?
-2. **Points of Contention**: What remains disputed?
-3. **Key Insights**: What were the strongest arguments made?
-4. **Conclusion**: Based on the debate, what's the most reasonable position?
-5. **Confidence**: How much consensus was reached? (Low/Medium/High)
+**Points of Agreement**: What did the debaters agree on?
 
-Be concise but thorough. Around 150 words."""
+**Points of Contention**: What remains disputed?
+
+**Key Insights**: What were the strongest arguments made?
+
+**Conclusion**: Based on the debate, what's the most reasonable position?
+
+**Confidence**: How much consensus was reached? (Low/Medium/High)
+
+IMPORTANT FORMATTING RULES:
+- Use EXACTLY these section names with **bold** formatting
+- Do NOT use numbered lists (1., 2., 3.) before section headers
+- Each section should have a few sentences or bullet points
+- Be concise but thorough. Around 150 words total."""
 
         try:
             response = ollama.chat(
-                model='llama3.2:3b',
+                model='mistral:7b',
                 messages=[{'role': 'user', 'content': prompt}],
                 options={'temperature': 0.5}
             )

@@ -14,6 +14,11 @@ interface DebateEntry {
   agents?: Array<{ name: string; role: string }>;
   question?: string;
   responding_to?: string;
+  // Voting fields
+  voter?: string;
+  vote_for?: string;
+  reason?: string;
+  tally?: Record<string, number>;
 }
 
 interface SavedDebate {
@@ -61,13 +66,13 @@ const agentColors: Record<string, { bg: string; text: string; border: string }> 
   Sam: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-l-amber-500" },
   Casey: { bg: "bg-purple-500/10", text: "text-purple-400", border: "border-l-purple-500" },
   Riley: { bg: "bg-pink-500/10", text: "text-pink-400", border: "border-l-pink-500" },
-  // Philosophers
-  Kant: { bg: "bg-indigo-500/10", text: "text-indigo-400", border: "border-l-indigo-500" },
-  Mill: { bg: "bg-teal-500/10", text: "text-teal-400", border: "border-l-teal-500" },
-  Aristotle: { bg: "bg-orange-500/10", text: "text-orange-400", border: "border-l-orange-500" },
-  Rawls: { bg: "bg-sky-500/10", text: "text-sky-400", border: "border-l-sky-500" },
-  Socrates: { bg: "bg-cyan-500/10", text: "text-cyan-400", border: "border-l-cyan-500" },
-  Nietzsche: { bg: "bg-rose-500/10", text: "text-rose-400", border: "border-l-rose-500" },
+  // Philosophers - distinct colors spread across the spectrum
+  Kant: { bg: "bg-indigo-500/10", text: "text-indigo-400", border: "border-l-indigo-500" },      // Deep blue-purple
+  Mill: { bg: "bg-yellow-500/10", text: "text-yellow-400", border: "border-l-yellow-500" },      // Bright yellow
+  Aristotle: { bg: "bg-orange-500/10", text: "text-orange-400", border: "border-l-orange-500" }, // Warm orange
+  Rawls: { bg: "bg-fuchsia-500/10", text: "text-fuchsia-400", border: "border-l-fuchsia-500" },  // Vibrant pink-purple
+  Socrates: { bg: "bg-lime-500/10", text: "text-lime-400", border: "border-l-lime-500" },        // Bright green
+  Nietzsche: { bg: "bg-red-500/10", text: "text-red-400", border: "border-l-red-500" },          // Bold red
   // System
   Moderator: { bg: "bg-neutral-500/10", text: "text-white", border: "border-l-neutral-500" },
 };
@@ -138,10 +143,13 @@ const parseSynthesis = (message: string) => {
     .replace(/\n\s*\d+\s*$/g, "") // Remove trailing numbers on their own line
     .replace(/\s+\d+\s*$/g, "") // Remove trailing numbers at end of text
     .replace(/There is no more synthesis\.?\s*/gi, "") // Remove "There is no more synthesis" text
+    // Remove numbered prefixes before section titles (e.g., "1. **Points of Agreement**" -> "**Points of Agreement**")
+    .replace(/^\d+\.\s*/gm, "")
     .trim();
   
   const sectionKeys = sectionConfig.map(s => s.key).join("|");
-  const sectionRegex = new RegExp(`\\*\\*(${sectionKeys}):?\\*\\*`, "gi");
+  // Match section headers with or without numbered prefixes
+  const sectionRegex = new RegExp(`(?:^|\\n)\\s*(?:\\d+\\.\\s*)?\\*\\*(${sectionKeys}):?\\*\\*`, "gi");
   
   const sectionMatches: { key: string; index: number; endIndex: number }[] = [];
   let match;
@@ -208,6 +216,89 @@ const SynthesisCard = ({ message }: { message: string }) => {
       ))}
     </div>
   );
+};
+
+// Voting Card Component
+const VotingCard = ({ entry }: { entry: DebateEntry }) => {
+  if (entry.type === "voting_start") {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="p-4 rounded-md border-l-2 border-l-yellow-500 bg-yellow-500/5"
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-yellow-400 text-lg">🗳️</span>
+          <span className="text-sm font-medium text-yellow-400 uppercase tracking-wider">Voting Round</span>
+        </div>
+        <p className="text-neutral-300 text-sm">{entry.message}</p>
+      </motion.div>
+    );
+  }
+
+  if (entry.type === "vote") {
+    const voterColor = getAgentColor(entry.voter || "");
+    const voteForColor = getAgentColor(entry.vote_for || "");
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: -10 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="p-3 rounded-md bg-neutral-900/50 border border-neutral-800 flex items-center gap-3"
+      >
+        <span className={`font-medium ${voterColor.text}`}>{entry.voter}</span>
+        <span className="text-neutral-600">→</span>
+        <span className={`font-medium ${voteForColor.text}`}>{entry.vote_for}</span>
+        {entry.reason && (
+          <span className="text-neutral-500 text-sm italic ml-2">&quot;{entry.reason}&quot;</span>
+        )}
+      </motion.div>
+    );
+  }
+
+  if (entry.type === "voting_results") {
+    const tally = entry.tally || {};
+    const sortedResults = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+    const maxVotes = sortedResults.length > 0 ? sortedResults[0][1] : 0;
+    const winners = sortedResults.filter(([, count]) => count === maxVotes).map(([name]) => name);
+    
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="p-4 rounded-md border-l-2 border-l-yellow-500 bg-yellow-500/10"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-yellow-400 text-lg">🏆</span>
+          <span className="text-sm font-medium text-yellow-400 uppercase tracking-wider">Results</span>
+        </div>
+        <div className="space-y-2">
+          {sortedResults.map(([name, count]) => {
+            const color = getAgentColor(name);
+            const isWinner = winners.includes(name);
+            return (
+              <div key={name} className={`flex items-center gap-2 ${isWinner ? 'opacity-100' : 'opacity-60'}`}>
+                <span className={`font-medium ${color.text}`}>{name}</span>
+                <span className="text-neutral-500">—</span>
+                <span className="text-neutral-300">{count} {count === 1 ? 'vote' : 'votes'}</span>
+                {isWinner && <span className="text-yellow-400">🏆</span>}
+              </div>
+            );
+          })}
+        </div>
+        {winners.length === 1 ? (
+          <p className="mt-3 text-sm text-yellow-300">
+            <strong>{winners[0]}</strong> wins the debate vote!
+          </p>
+        ) : winners.length > 1 ? (
+          <p className="mt-3 text-sm text-yellow-300">
+            <strong>{winners.join(' & ')}</strong> tied for the most votes!
+          </p>
+        ) : null}
+      </motion.div>
+    );
+  }
+
+  return null;
 };
 
 // Collapsible Message Component with interactive features
@@ -689,7 +780,8 @@ export default function Home() {
   };
 
   const argumentEntries = debates.filter((d) => 
-    d.type === "argument" || d.type === "synthesis" || d.type === "followup" || d.type === "response"
+    d.type === "argument" || d.type === "synthesis" || d.type === "followup" || d.type === "response" || 
+    d.type === "voting_start" || d.type === "vote" || d.type === "voting_results"
   );
   const debateComplete = !isLoading && argumentEntries.length > 0;
   
@@ -1164,21 +1256,110 @@ export default function Home() {
             {/* Arguments */}
             <div className="space-y-4">
               <AnimatePresence>
-                {argumentEntries.map((entry, i) => (
-                  <CollapsibleMessage
-                    key={i}
-                    entry={entry}
-                    index={i}
-                    isExpanded={!collapsedMessages.has(i)}
-                    onToggle={() => toggleMessageExpand(i)}
-                    voteValue={votes[i] || 0}
-                    isPinned={pinnedPoints.some(p => p.index === i)}
-                    onVote={(dir) => vote(i, dir)}
-                    onPin={() => pinPoint(i, entry.message || "", entry.agent || "")}
-                    onFollowUp={() => setFollowUpAgent(entry.agent || null)}
-                    onRespond={() => setRespondToEntry({ index: i, entry })}
-                  />
-                ))}
+                {argumentEntries.map((entry, i) => {
+                  // Voting Start
+                  if (entry.type === "voting_start") {
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-4 rounded-md border border-amber-500/30 bg-amber-500/5"
+                      >
+                        <div className="flex items-center gap-2 text-amber-400 text-sm font-medium">
+                          <span>🗳️</span>
+                          <span>Voting Round</span>
+                        </div>
+                        <p className="text-neutral-400 text-xs mt-1">{entry.message}</p>
+                      </motion.div>
+                    );
+                  }
+                  
+                  // Individual Vote
+                  if (entry.type === "vote") {
+                    const voterColors = getAgentColor(entry.voter || "");
+                    const voteForColors = getAgentColor(entry.vote_for || "");
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-3 rounded-md border border-neutral-800 bg-neutral-900/30"
+                      >
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className={voterColors.text}>{entry.voter}</span>
+                          <span className="text-neutral-600">voted for</span>
+                          <span className={voteForColors.text}>{entry.vote_for}</span>
+                        </div>
+                        <p className="text-neutral-500 text-xs mt-1 italic">"{entry.reason}"</p>
+                      </motion.div>
+                    );
+                  }
+                  
+                  // Voting Results
+                  if (entry.type === "voting_results") {
+                    const tally = entry.tally || {};
+                    const sortedResults = Object.entries(tally).sort(([,a], [,b]) => (b as number) - (a as number));
+                    const maxVotes = sortedResults.length > 0 ? sortedResults[0][1] as number : 0;
+                    const winners = sortedResults.filter(([,count]) => count === maxVotes).map(([name]) => name);
+                    
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-4 rounded-md border border-amber-500/30 bg-amber-500/10"
+                      >
+                        <div className="flex items-center gap-2 text-amber-400 text-sm font-medium mb-3">
+                          <span>🏆</span>
+                          <span>Voting Results</span>
+                        </div>
+                        <div className="space-y-2">
+                          {sortedResults.map(([name, count]) => {
+                            const colors = getAgentColor(name);
+                            const isWinner = winners.includes(name);
+                            return (
+                              <div key={name} className={`flex items-center justify-between p-2 rounded ${isWinner ? 'bg-amber-500/10' : ''}`}>
+                                <span className={`${colors.text} ${isWinner ? 'font-medium' : ''}`}>
+                                  {isWinner && '👑 '}{name}
+                                </span>
+                                <span className="text-neutral-400 text-sm">
+                                  {count} {count === 1 ? 'vote' : 'votes'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {winners.length === 1 ? (
+                          <p className="text-amber-400 text-sm mt-3 font-medium">
+                            {winners[0]} wins the debate!
+                          </p>
+                        ) : winners.length > 1 ? (
+                          <p className="text-amber-400 text-sm mt-3 font-medium">
+                            It's a tie between {winners.join(' and ')}!
+                          </p>
+                        ) : null}
+                      </motion.div>
+                    );
+                  }
+                  
+                  // Regular entries (argument, synthesis, followup, response)
+                  return (
+                    <CollapsibleMessage
+                      key={i}
+                      entry={entry}
+                      index={i}
+                      isExpanded={!collapsedMessages.has(i)}
+                      onToggle={() => toggleMessageExpand(i)}
+                      voteValue={votes[i] || 0}
+                      isPinned={pinnedPoints.some(p => p.index === i)}
+                      onVote={(dir) => vote(i, dir)}
+                      onPin={() => pinPoint(i, entry.message || "", entry.agent || "")}
+                      onFollowUp={() => setFollowUpAgent(entry.agent || null)}
+                      onRespond={() => setRespondToEntry({ index: i, entry })}
+                    />
+                  );
+                })}
               </AnimatePresence>
 
               {/* Loading Indicator */}
