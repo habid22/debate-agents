@@ -36,22 +36,39 @@ interface PinnedPoint {
 
 // Agent template mapping
 const agentTemplates: Record<string, string> = {
+  // Modern agents
   Alex: "optimist",
   Morgan: "skeptic",
   Jordan: "pragmatist",
   Sam: "innovator",
   Casey: "veteran",
   Riley: "devils_advocate",
+  // Philosophers
+  Kant: "kant",
+  Mill: "mill",
+  Aristotle: "aristotle",
+  Rawls: "rawls",
+  Socrates: "socrates",
+  Nietzsche: "nietzsche",
 };
 
 // Agent color mapping
 const agentColors: Record<string, { bg: string; text: string; border: string }> = {
+  // Modern agents
   Alex: { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-l-emerald-500" },
   Morgan: { bg: "bg-red-500/10", text: "text-red-400", border: "border-l-red-500" },
   Jordan: { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-l-blue-500" },
   Sam: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-l-amber-500" },
   Casey: { bg: "bg-purple-500/10", text: "text-purple-400", border: "border-l-purple-500" },
   Riley: { bg: "bg-pink-500/10", text: "text-pink-400", border: "border-l-pink-500" },
+  // Philosophers
+  Kant: { bg: "bg-indigo-500/10", text: "text-indigo-400", border: "border-l-indigo-500" },
+  Mill: { bg: "bg-teal-500/10", text: "text-teal-400", border: "border-l-teal-500" },
+  Aristotle: { bg: "bg-orange-500/10", text: "text-orange-400", border: "border-l-orange-500" },
+  Rawls: { bg: "bg-sky-500/10", text: "text-sky-400", border: "border-l-sky-500" },
+  Socrates: { bg: "bg-cyan-500/10", text: "text-cyan-400", border: "border-l-cyan-500" },
+  Nietzsche: { bg: "bg-rose-500/10", text: "text-rose-400", border: "border-l-rose-500" },
+  // System
   Moderator: { bg: "bg-neutral-500/10", text: "text-white", border: "border-l-neutral-500" },
 };
 
@@ -74,6 +91,18 @@ const cleanMarkdown = (text: string): string => {
   return text
     .replace(/\*\*([^*]+)\*\*/g, "$1")
     .replace(/^:\s*/, "")
+    .trim();
+};
+
+// Clean agent message - remove leading **Name**: patterns and trailing prompts
+const cleanAgentMessage = (message: string): string => {
+  return message
+    // Remove leading **Name**: or **Name** (Name): patterns
+    .replace(/^\*\*[^*]+\*\*:?\s*/i, "")
+    // Remove any remaining **bold** formatting
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    // Remove trailing "Please respond" type prompts
+    .replace(/\s*(Please respond|Please reply|Your turn|Respond with)[^.]*\.?\s*$/i, "")
     .trim();
 };
 
@@ -197,9 +226,12 @@ const CollapsibleMessage = ({
   const isSynthesis = entry.type === "synthesis";
   const isFollowUp = entry.type === "followup";
   const isResponse = entry.type === "response";
-  const messagePreview = entry.message?.slice(0, 150) || "";
-  const isLong = (entry.message?.length || 0) > 150;
   const isModeratorEntry = entry.agent === "Moderator" || isSynthesis;
+  
+  // Clean the message for non-synthesis entries
+  const cleanedMessage = isSynthesis ? entry.message : cleanAgentMessage(entry.message || "");
+  const messagePreview = cleanedMessage?.slice(0, 150) || "";
+  const isLong = (cleanedMessage?.length || 0) > 150;
 
   return (
     <motion.div
@@ -306,7 +338,7 @@ const CollapsibleMessage = ({
           <SynthesisCard message={entry.message || ""} />
         ) : (
           <p className="text-neutral-400 text-sm leading-relaxed">
-            {isExpanded || !isLong ? entry.message : `${messagePreview}...`}
+            {isExpanded || !isLong ? cleanedMessage : `${messagePreview}...`}
           </p>
         )}
       </div>
@@ -734,7 +766,7 @@ export default function Home() {
           </div>
 
           {/* Agent Selection */}
-          <div className="mb-6">
+          <div className="mb-4">
             <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-3">
               Agents
             </label>
@@ -746,6 +778,40 @@ export default function Home() {
                 innovator: { name: "Sam", label: "Innovator" },
                 veteran: { name: "Casey", label: "Veteran" },
                 devils_advocate: { name: "Riley", label: "Contrarian" },
+              }).map(([key, { name, label }]) => {
+                const isSelected = selectedTemplates.includes(key);
+                const colors = getAgentColor(name);
+                return (
+                  <button
+                    key={key}
+                    onClick={() => toggleTemplate(key)}
+                    disabled={isLoading}
+                    className={`px-3 py-2 rounded-md text-xs font-medium transition-all disabled:opacity-50 ${
+                      isSelected
+                        ? `${colors.bg} ${colors.text} border border-current`
+                        : "border border-neutral-800 text-neutral-500 hover:border-neutral-600 hover:text-neutral-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Philosophers Selection */}
+          <div className="mb-6">
+            <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-3">
+              Philosophers
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {Object.entries({
+                kant: { name: "Kant", label: "Kant" },
+                mill: { name: "Mill", label: "Mill" },
+                aristotle: { name: "Aristotle", label: "Aristotle" },
+                rawls: { name: "Rawls", label: "Rawls" },
+                socrates: { name: "Socrates", label: "Socrates" },
+                nietzsche: { name: "Nietzsche", label: "Nietzsche" },
               }).map(([key, { name, label }]) => {
                 const isSelected = selectedTemplates.includes(key);
                 const colors = getAgentColor(name);
