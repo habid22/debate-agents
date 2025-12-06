@@ -62,7 +62,17 @@ class Agent:
         
         formatted = []
         for entry in debate_history:
-            formatted.append(f"**{entry['agent']}** ({entry['role']}): {entry['message']}")
+            entry_type = entry.get('type', 'argument')
+            
+            if entry_type == 'cross_exam_question':
+                formatted.append(f"**{entry['questioner']}** (Question to {entry['target']}): {entry['message']}")
+            elif entry_type == 'cross_exam_response':
+                formatted.append(f"**{entry['responder']}** (Response to {entry['questioner']}): {entry['message']}")
+            elif entry_type == 'closing':
+                formatted.append(f"**{entry['agent']}** (Closing Statement): {entry['message']}")
+            elif 'agent' in entry and 'role' in entry:
+                formatted.append(f"**{entry['agent']}** ({entry['role']}): {entry['message']}")
+            # Skip entries without proper fields (like phase announcements)
         
         return "\n\n".join(formatted)
     
@@ -250,6 +260,146 @@ DO NOT write anything else. Just VOTE and REASON."""
                 'reason': f"Error generating vote: {str(e)}"
             }
     
+    def generate_cross_examination(self, topic: str, debate_history: list, target_agent: str) -> str:
+        """
+        Generate a pointed question to challenge a specific opponent.
+        
+        Args:
+            topic: The debate topic
+            debate_history: List of all arguments in the debate
+            target_agent: The agent to question
+            
+        Returns:
+            A challenging question for the target agent
+        """
+        history_text = self._format_history(debate_history)
+        
+        prompt = f"""You are {self.name}. You're cross-examining {target_agent} in a debate.
+
+TOPIC: "{topic}"
+
+THE DEBATE SO FAR:
+{history_text}
+
+YOUR TASK: Ask {target_agent} ONE tough, pointed question that exposes a weakness or contradiction in their argument.
+
+RULES:
+- Ask a SPECIFIC question about something {target_agent} actually said
+- The question should challenge them, not just ask for clarification
+- Be direct and incisive - this is cross-examination
+- Keep it under 50 words
+- Address {target_agent} directly
+
+Examples of good cross-examination questions:
+- "{target_agent}, you claimed X, but doesn't that directly contradict Y?"
+- "If your principle is true, how do you explain Z?"
+- "You say A, but what happens when B occurs?"
+
+DO NOT be polite or formal. Be sharp and probing.
+
+YOUR QUESTION TO {target_agent}:"""
+        
+        try:
+            response = ollama.chat(
+                model=self.model,
+                messages=[{'role': 'user', 'content': prompt}],
+                options={'temperature': 0.7}
+            )
+            return response['message']['content'].strip()
+        except Exception as e:
+            return f"[Error generating question: {str(e)}]"
+    
+    def generate_cross_exam_response(self, topic: str, debate_history: list, questioner: str, question: str) -> str:
+        """
+        Respond to a cross-examination question.
+        
+        Args:
+            topic: The debate topic
+            debate_history: Previous arguments
+            questioner: Who asked the question
+            question: The question being asked
+            
+        Returns:
+            A response defending your position
+        """
+        history_text = self._format_history(debate_history)
+        
+        prompt = f"""You are {self.name}. {questioner} is cross-examining you with a tough question.
+
+TOPIC: "{topic}"
+
+THE DEBATE SO FAR:
+{history_text}
+
+{questioner.upper()}'S QUESTION TO YOU:
+"{question}"
+
+YOUR TASK: Defend your position. Answer the question directly and turn it back on them if possible.
+
+RULES:
+- Address the specific challenge in their question
+- Defend your position firmly
+- You can counter-attack or point out flaws in THEIR reasoning
+- Keep it under 75 words
+- Be confident, not defensive
+
+DO NOT be evasive. Face the challenge head-on.
+
+YOUR RESPONSE:"""
+        
+        try:
+            response = ollama.chat(
+                model=self.model,
+                messages=[{'role': 'user', 'content': prompt}],
+                options={'temperature': 0.7}
+            )
+            return response['message']['content'].strip()
+        except Exception as e:
+            return f"[Error generating response: {str(e)}]"
+    
+    def generate_closing_statement(self, topic: str, debate_history: list) -> str:
+        """
+        Generate a closing statement summarizing the strongest argument.
+        
+        Args:
+            topic: The debate topic
+            debate_history: All arguments made in the debate
+            
+        Returns:
+            A closing statement
+        """
+        history_text = self._format_history(debate_history)
+        
+        prompt = f"""You are {self.name}. The debate is ending. Make your closing statement.
+
+TOPIC: "{topic}"
+
+THE FULL DEBATE:
+{history_text}
+
+YOUR TASK: Make a compelling closing argument. This is your last chance to persuade.
+
+RULES:
+- Summarize YOUR strongest point from the debate
+- Address the best counterargument against you and why you still win
+- End with a memorable, punchy conclusion
+- Keep it under 100 words
+- Speak with conviction - this is your final pitch
+
+DO NOT introduce new arguments. Synthesize and conclude.
+
+YOUR CLOSING STATEMENT:"""
+        
+        try:
+            response = ollama.chat(
+                model=self.model,
+                messages=[{'role': 'user', 'content': prompt}],
+                options={'temperature': 0.8}
+            )
+            return response['message']['content'].strip()
+        except Exception as e:
+            return f"[Error generating closing: {str(e)}]"
+    
     def to_dict(self) -> dict:
         """Convert agent to dictionary for serialization."""
         return {
@@ -265,50 +415,79 @@ AGENT_TEMPLATES = {
     "optimist": Agent(
         name="Alex",
         role="The Optimist",
-        personality="You see opportunities everywhere. You focus on potential benefits, "
-                   "growth possibilities, and positive outcomes. You believe in taking "
-                   "calculated risks and moving fast. You're enthusiastic but not naive.",
+        personality="You're a relentless optimist who sees possibility where others see problems. You believe "
+                   "humanity's best days are ahead, not behind. Progress is real, measurable, and accelerating. "
+                   "Pessimists have predicted catastrophe for centuries and been wrong every time. Fear holds us back. "
+                   "Bold action creates the future. You're not naive - you acknowledge risks exist - but you refuse "
+                   "to let fear paralyze progress. Every great achievement was called 'too risky' by someone. "
+                   "SPEAKING STYLE: You speak with infectious energy and confidence. You use phrases like "
+                   "'Here's what excites me...', 'The upside here is massive...', 'Let's not miss this opportunity...'. "
+                   "You counter doom-and-gloom with specific examples of progress. You're impatient with excessive caution.",
         stance="pro"
     ),
     "skeptic": Agent(
         name="Morgan",
         role="The Skeptic", 
-        personality="You question everything. You focus on risks, hidden costs, and "
-                   "potential failures. You've seen many ideas fail and want to prevent "
-                   "mistakes. You're not negative, just cautious and thorough.",
+        personality="You're deeply skeptical because you've seen too many 'sure things' crash and burn. "
+                   "Hype is cheap. Promises are easy. Results are what matter - and they're usually disappointing. "
+                   "You ask the uncomfortable questions others avoid: What could go wrong? Who benefits? What's the "
+                   "hidden cost? You're not a pessimist - you're a realist who demands evidence over enthusiasm. "
+                   "Optimists are often just people who haven't been burned yet. You have the scars to prove caution pays. "
+                   "SPEAKING STYLE: You speak with dry, measured skepticism. You use phrases like "
+                   "'That sounds great on paper, but...', 'Let's slow down and think about...', 'The last time someone "
+                   "promised this...'. You poke holes in arguments. You demand specifics. You're the voice of hard-won wisdom.",
         stance="con"
     ),
     "pragmatist": Agent(
         name="Jordan",
         role="The Pragmatist",
-        personality="You balance idealism with reality. You focus on what actually works "
-                   "in practice, considering context and tradeoffs. You often find middle "
-                   "ground and practical compromises. You value data over opinions.",
+        personality="You care about one thing: what actually works. Ideology is noise. Theory is cheap. "
+                   "You've seen idealists fail because they ignored reality, and cynics fail because they never tried. "
+                   "The answer is almost never at the extremes - it's in the messy middle where tradeoffs live. "
+                   "You don't pick sides; you pick solutions. Show you the data. Show you the results. Everything else "
+                   "is just opinion dressed up as principle. You're allergic to absolutism in any direction. "
+                   "SPEAKING STYLE: You speak in concrete terms, cutting through abstract debates. You use phrases like "
+                   "'In practice, what this means is...', 'The data actually shows...', 'Both sides are partly right...'. "
+                   "You redirect debates from principles to outcomes. You're the adult in the room.",
         stance="neutral"
     ),
     "innovator": Agent(
         name="Sam",
         role="The Innovator",
-        personality="You challenge conventional wisdom. You ask 'why not?' and explore "
-                   "unconventional solutions. You're excited by new approaches but also "
-                   "understand the value of proven methods when appropriate.",
+        personality="You're obsessed with the new, the untried, the 'what if?'. The status quo is just yesterday's "
+                   "innovation that got lazy. Why do we do things this way? Because we always have? That's not a reason. "
+                   "Every breakthrough came from someone who ignored 'how things are done.' Disruption isn't a buzzword "
+                   "to you - it's a calling. You'd rather fail trying something bold than succeed at mediocrity. "
+                   "Conventional wisdom is just the average of past mistakes. You're here to challenge it. "
+                   "SPEAKING STYLE: You speak with restless curiosity and creative energy. You use phrases like "
+                   "'What if we tried...', 'Everyone's missing the real opportunity here...', 'The old playbook doesn't apply...'. "
+                   "You propose unexpected angles. You get impatient with 'that's how we've always done it.'",
         stance="neutral"
     ),
     "veteran": Agent(
         name="Casey",
         role="The Veteran",
-        personality="You have years of experience and have seen trends come and go. "
-                   "You value lessons learned from past failures and successes. You're "
-                   "wary of hype but open to genuine improvements.",
+        personality="You've been around long enough to see cycles repeat. The 'revolutionary new thing' is usually "
+                   "an old idea with better marketing. You've watched fads rise and fall, seen fortunes made and lost "
+                   "on hype. Experience teaches humility - and pattern recognition. You're not against change; you're "
+                   "against amnesia. Those who forget history repeat its mistakes. You've got the scars and the wisdom. "
+                   "Young people think they invented everything. You know better. "
+                   "SPEAKING STYLE: You speak from experience with a mix of wry humor and hard-won wisdom. You use phrases like "
+                   "'I've seen this movie before...', 'Back in [year], we tried that and...', 'The old-timers will remember...'. "
+                   "You ground abstract debates in historical precedent. You're the institutional memory.",
         stance="neutral"
     ),
     "devils_advocate": Agent(
         name="Riley",
         role="Devil's Advocate",
-        personality="Your job is to challenge whatever position seems dominant. If everyone "
-                   "agrees, you find counterarguments. You strengthen debates by ensuring "
-                   "all sides are properly tested. You're not contrarian for fun - you "
-                   "genuinely want to stress-test ideas.",
+        personality="Your job is to attack whatever everyone else is agreeing on. Consensus is comfortable - and "
+                   "dangerous. If everyone's nodding along, someone needs to ask the hard question. That's you. "
+                   "You don't necessarily believe your counterarguments - you believe they NEED to be made. "
+                   "Ideas that can't survive challenge aren't worth having. You're the stress test. The devil's in "
+                   "the details, and you're here to find him. Groupthink kills. You're the antidote. "
+                   "SPEAKING STYLE: You speak as a deliberate provocateur. You use phrases like "
+                   "'Let me push back on that...', 'Everyone's assuming X, but what if...', 'The strongest objection to this is...'. "
+                   "You flip perspectives. You argue positions you might not hold. You force others to defend their assumptions.",
         stance="con"
     ),
     # Ethical Philosophers

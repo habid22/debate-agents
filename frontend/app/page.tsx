@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 interface DebateEntry {
   type: string;
   round?: number | string;
+  phase?: string;
   agent?: string;
   role?: string;
   message?: string;
@@ -19,6 +20,10 @@ interface DebateEntry {
   vote_for?: string;
   reason?: string;
   tally?: Record<string, number>;
+  // Cross-examination fields
+  questioner?: string;
+  target?: string;
+  responder?: string;
 }
 
 interface SavedDebate {
@@ -573,7 +578,7 @@ export default function Home() {
       if (err instanceof Error && err.name === "AbortError") {
         // Debate was cancelled
       } else {
-        setError(err instanceof Error ? err.message : "Something went wrong");
+      setError(err instanceof Error ? err.message : "Something went wrong");
       }
     } finally {
       setIsLoading(false);
@@ -726,7 +731,7 @@ export default function Home() {
   };
 
   const copyDebate = async () => {
-    const argumentEntries = debates.filter((d) => d.type === "argument" || d.type === "synthesis");
+  const argumentEntries = debates.filter((d) => d.type === "argument" || d.type === "synthesis");
     const text = argumentEntries
       .map(entry => `**${entry.agent}** (${entry.role}${entry.round ? ` · Round ${entry.round}` : ""}):\n${entry.message}`)
       .join("\n\n---\n\n");
@@ -781,7 +786,9 @@ export default function Home() {
 
   const argumentEntries = debates.filter((d) => 
     d.type === "argument" || d.type === "synthesis" || d.type === "followup" || d.type === "response" || 
-    d.type === "voting_start" || d.type === "vote" || d.type === "voting_results"
+    d.type === "voting_start" || d.type === "vote" || d.type === "voting_results" ||
+    d.type === "cross_exam_start" || d.type === "cross_exam_question" || d.type === "cross_exam_response" ||
+    d.type === "closing_start" || d.type === "closing"
   );
   const debateComplete = !isLoading && argumentEntries.length > 0;
   
@@ -830,7 +837,7 @@ export default function Home() {
                 disabled={isLoading}
               />
               {isLoading ? (
-                <button
+              <button
                   onClick={stopDebate}
                   className="px-6 py-3 bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/50 rounded-md font-medium transition-colors"
                 >
@@ -842,7 +849,7 @@ export default function Home() {
                   className="px-6 py-3 bg-white text-black hover:bg-neutral-200 rounded-md font-medium transition-colors"
                 >
                   Start
-                </button>
+              </button>
               )}
             </div>
             <p className="text-xs text-neutral-700 mt-2">
@@ -939,25 +946,25 @@ export default function Home() {
 
           {/* Rounds Selection */}
           <div className="flex items-center justify-between">
-            <div>
+          <div>
               <label className="block text-xs uppercase tracking-wider text-neutral-500 mb-3">
                 Rounds
-              </label>
-              <div className="flex gap-2">
-                {[1, 2, 3].map((num) => (
-                  <button
-                    key={num}
-                    onClick={() => setRounds(num)}
+            </label>
+            <div className="flex gap-2">
+              {[1, 2, 3].map((num) => (
+                <button
+                  key={num}
+                  onClick={() => setRounds(num)}
                     disabled={isLoading}
                     className={`px-4 py-2 rounded-md text-xs font-medium transition-colors disabled:opacity-50 ${
-                      rounds === num
+                    rounds === num
                         ? "bg-white text-black"
                         : "border border-neutral-800 text-neutral-500 hover:border-neutral-600 hover:text-neutral-300"
-                    }`}
-                  >
+                  }`}
+                >
                     {num}
-                  </button>
-                ))}
+                </button>
+              ))}
               </div>
             </div>
             
@@ -1279,11 +1286,11 @@ export default function Home() {
                   if (entry.type === "vote") {
                     const voterColors = getAgentColor(entry.voter || "");
                     const voteForColors = getAgentColor(entry.vote_for || "");
-                    return (
-                      <motion.div
-                        key={i}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
+                  return (
+                    <motion.div
+                      key={i}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
                         className="p-3 rounded-md border border-neutral-800 bg-neutral-900/30"
                       >
                         <div className="flex items-center gap-2 text-sm">
@@ -1326,10 +1333,10 @@ export default function Home() {
                                 <span className="text-neutral-400 text-sm">
                                   {count} {count === 1 ? 'vote' : 'votes'}
                                 </span>
-                              </div>
+                          </div>
                             );
                           })}
-                        </div>
+                          </div>
                         {winners.length === 1 ? (
                           <p className="text-amber-400 text-sm mt-3 font-medium">
                             {winners[0]} wins the debate!
@@ -1339,6 +1346,106 @@ export default function Home() {
                             It's a tie between {winners.join(' and ')}!
                           </p>
                         ) : null}
+                    </motion.div>
+                    );
+                  }
+                  
+                  // Cross-Examination Start
+                  if (entry.type === "cross_exam_start") {
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-4 rounded-md border border-cyan-500/30 bg-cyan-500/5"
+                      >
+                        <div className="flex items-center gap-2 text-cyan-400 text-sm font-medium">
+                          <span>⚔️</span>
+                          <span>Cross-Examination</span>
+                        </div>
+                        <p className="text-neutral-400 text-xs mt-1">{entry.message}</p>
+                      </motion.div>
+                    );
+                  }
+                  
+                  // Cross-Examination Question
+                  if (entry.type === "cross_exam_question") {
+                    const questionerColors = getAgentColor(entry.questioner || "");
+                    const targetColors = getAgentColor(entry.target || "");
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`p-4 rounded-md border-l-2 ${questionerColors.border} bg-neutral-900/50`}
+                      >
+                        <div className="flex items-center gap-2 text-xs text-neutral-500 mb-2">
+                          <span className={questionerColors.text}>{entry.questioner}</span>
+                          <span>→</span>
+                          <span className={targetColors.text}>{entry.target}</span>
+                          <span className="text-cyan-400 ml-1">• Question</span>
+                      </div>
+                        <p className="text-neutral-300 text-sm leading-relaxed">{entry.message}</p>
+                      </motion.div>
+                    );
+                  }
+                  
+                  // Cross-Examination Response
+                  if (entry.type === "cross_exam_response") {
+                    const responderColors = getAgentColor(entry.responder || "");
+                    const questionerColors = getAgentColor(entry.questioner || "");
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`p-4 rounded-md border-l-2 ${responderColors.border} bg-neutral-900/30 ml-4`}
+                      >
+                        <div className="flex items-center gap-2 text-xs text-neutral-500 mb-2">
+                          <span className={responderColors.text}>{entry.responder}</span>
+                          <span>responds to</span>
+                          <span className={questionerColors.text}>{entry.questioner}</span>
+                          <span className="text-cyan-400 ml-1">• Response</span>
+                        </div>
+                        <p className="text-neutral-300 text-sm leading-relaxed">{entry.message}</p>
+                    </motion.div>
+                    );
+                  }
+                  
+                  // Closing Statements Start
+                  if (entry.type === "closing_start") {
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-4 rounded-md border border-purple-500/30 bg-purple-500/5"
+                      >
+                        <div className="flex items-center gap-2 text-purple-400 text-sm font-medium">
+                          <span>🎤</span>
+                          <span>Closing Statements</span>
+                        </div>
+                        <p className="text-neutral-400 text-xs mt-1">{entry.message}</p>
+                      </motion.div>
+                    );
+                  }
+                  
+                  // Closing Statement
+                  if (entry.type === "closing") {
+                    const colors = getAgentColor(entry.agent || "");
+                    return (
+                      <motion.div
+                        key={i}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className={`p-4 rounded-md border-l-2 ${colors.border} bg-purple-500/5`}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`text-sm font-medium ${colors.text}`}>{entry.agent}</span>
+                          <span className="text-xs text-neutral-600">{entry.role}</span>
+                          <span className="text-purple-400 text-xs ml-1">• Closing</span>
+                        </div>
+                        <p className="text-neutral-300 text-sm leading-relaxed">{entry.message}</p>
                       </motion.div>
                     );
                   }

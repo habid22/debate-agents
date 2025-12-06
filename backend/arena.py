@@ -35,6 +35,14 @@ class DebateArena:
         """
         Run the debate and yield each argument as it's generated.
         
+        Structure:
+        1. Opening Statements (Round 1)
+        2. Rebuttals (Rounds 2 to N)
+        3. Cross-Examination
+        4. Closing Statements
+        5. Voting
+        6. Synthesis
+        
         Yields:
             Dictionary containing round number, agent info, and their argument
         """
@@ -56,40 +64,71 @@ class DebateArena:
             "rounds": self.rounds
         }
         
-        # Run each round
+        # ========== PHASE 1: OPENING STATEMENTS & REBUTTALS ==========
         for round_num in range(1, self.rounds + 1):
+            phase_name = "Opening Statements" if round_num == 1 else f"Rebuttal Round {round_num - 1}"
             yield {
                 "type": "round_start",
-                "round": round_num
+                "round": round_num,
+                "phase": phase_name
             }
             
             for agent in self.agents:
-                # Generate the agent's response
                 message = agent.generate_response(
                     topic=self.topic,
                     debate_history=self.history,
                     round_num=round_num
                 )
                 
-                # Create the entry
                 entry = {
                     "type": "argument",
                     "round": round_num,
+                    "phase": phase_name,
                     "agent": agent.name,
                     "role": agent.role,
                     "message": message
                 }
                 
-                # Store in history
                 self.history.append(entry)
-                
-                # Yield for real-time streaming
                 yield entry
         
-        # Voting round
+        # ========== PHASE 2: CROSS-EXAMINATION ==========
+        yield {
+            "type": "cross_exam_start",
+            "message": "Cross-Examination: Each debater will ask a pointed question to challenge an opponent."
+        }
+        
+        cross_exam_entries = self._run_cross_examination()
+        for entry in cross_exam_entries:
+            self.history.append(entry)
+            yield entry
+        
+        # ========== PHASE 3: CLOSING STATEMENTS ==========
+        yield {
+            "type": "closing_start",
+            "message": "Closing Statements: Each debater makes their final argument."
+        }
+        
+        for agent in self.agents:
+            closing = agent.generate_closing_statement(
+                topic=self.topic,
+                debate_history=self.history
+            )
+            
+            entry = {
+                "type": "closing",
+                "agent": agent.name,
+                "role": agent.role,
+                "message": closing
+            }
+            
+            self.history.append(entry)
+            yield entry
+        
+        # ========== PHASE 4: VOTING ==========
         yield {
             "type": "voting_start",
-            "message": "The debate has concluded. Each philosopher will now vote for the argument they found most compelling."
+            "message": "Voting: Each debater votes for the most compelling argument."
         }
         
         votes = self._run_voting_round()
@@ -121,6 +160,50 @@ class DebateArena:
         }
         
         self.is_running = False
+    
+    def _run_cross_examination(self) -> list:
+        """Run cross-examination where each agent questions another."""
+        entries = []
+        agent_names = [agent.name for agent in self.agents]
+        
+        # Each agent picks someone to question (rotate through opponents)
+        for i, questioner in enumerate(self.agents):
+            # Pick the next agent in rotation (not themselves)
+            target_idx = (i + 1) % len(self.agents)
+            target = self.agents[target_idx]
+            
+            # Generate the question
+            question = questioner.generate_cross_examination(
+                topic=self.topic,
+                debate_history=self.history,
+                target_agent=target.name
+            )
+            
+            question_entry = {
+                "type": "cross_exam_question",
+                "questioner": questioner.name,
+                "target": target.name,
+                "message": question
+            }
+            entries.append(question_entry)
+            
+            # Generate the response
+            response = target.generate_cross_exam_response(
+                topic=self.topic,
+                debate_history=self.history,
+                questioner=questioner.name,
+                question=question
+            )
+            
+            response_entry = {
+                "type": "cross_exam_response",
+                "responder": target.name,
+                "questioner": questioner.name,
+                "message": response
+            }
+            entries.append(response_entry)
+        
+        return entries
     
     def _run_voting_round(self) -> list:
         """Run a voting round where each agent votes for the most compelling argument."""
@@ -184,10 +267,26 @@ class DebateArena:
         # Format all arguments
         arguments_text = []
         for entry in self.history:
-            arguments_text.append(
-                f"**{entry['agent']}** ({entry['role']}, Round {entry['round']}): "
-                f"{entry['message']}"
-            )
+            entry_type = entry.get('type', 'argument')
+            
+            if entry_type == 'cross_exam_question':
+                arguments_text.append(
+                    f"**{entry['questioner']}** (Question to {entry['target']}): {entry['message']}"
+                )
+            elif entry_type == 'cross_exam_response':
+                arguments_text.append(
+                    f"**{entry['responder']}** (Response): {entry['message']}"
+                )
+            elif entry_type == 'closing':
+                arguments_text.append(
+                    f"**{entry['agent']}** (Closing Statement): {entry['message']}"
+                )
+            elif 'agent' in entry:
+                round_info = f", Round {entry.get('round', '?')}" if 'round' in entry else ""
+                arguments_text.append(
+                    f"**{entry['agent']}** ({entry.get('role', 'Debater')}{round_info}): "
+                    f"{entry['message']}"
+                )
         
         all_arguments = "\n\n".join(arguments_text)
         
