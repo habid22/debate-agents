@@ -39,8 +39,13 @@ class Agent:
         # Format the debate history for context
         history_text = self._format_history(debate_history)
         
+        # Extract participants from debate history
+        participants = self._extract_participants(debate_history)
+        # Remove self from participants list
+        other_participants = [p for p in participants if p != self.name]
+        
         # Build the prompt
-        prompt = self._build_prompt(topic, history_text, round_num)
+        prompt = self._build_prompt(topic, history_text, round_num, other_participants)
         
         try:
             response = ollama.chat(
@@ -51,7 +56,10 @@ class Agent:
                     'top_p': 0.9,
                 }
             )
-            return response['message']['content'].strip()
+            result = response['message']['content'].strip()
+            # Remove surrounding quotation marks if present
+            result = result.strip('"\'')
+            return result
         except Exception as e:
             return f"[Error generating response: {str(e)}]"
     
@@ -76,7 +84,21 @@ class Agent:
         
         return "\n\n".join(formatted)
     
-    def _build_prompt(self, topic: str, history_text: str, round_num: int) -> str:
+    def _extract_participants(self, debate_history: list) -> list:
+        """Extract unique participant names from debate history."""
+        participants = set()
+        for entry in debate_history:
+            if 'agent' in entry:
+                participants.add(entry['agent'])
+            if 'questioner' in entry:
+                participants.add(entry['questioner'])
+            if 'responder' in entry:
+                participants.add(entry['responder'])
+            if 'target' in entry:
+                participants.add(entry['target'])
+        return list(participants)
+    
+    def _build_prompt(self, topic: str, history_text: str, round_num: int, participants: list = None) -> str:
         """Build the prompt for the LLM."""
         
         if round_num == 1:
@@ -89,31 +111,34 @@ class Agent:
 "{topic}"
 
 ## Context
-You are in a private, casual debate with other philosophers. Speak naturally and directly.
+You are in a debate. Speak naturally and directly.
 
 ## Your Task
-Give your opening argument. Speak in {self.name}'s authentic voice - their way of reasoning, their philosophical approach.
+Give your opening argument from YOUR unique perspective as {self.name}.
 
 CRITICAL RULES:
-- Speak in {self.name}'s authentic voice and style
-- Take a clear stance that reflects your philosophy
-- Use a specific example
+- Your argument must reflect YOUR unique worldview as {self.role}
+- Use YOUR characteristic way of thinking - what makes YOU different from others?
+- Pick a SPECIFIC angle that fits YOUR personality (not generic points anyone could make)
+- Use a concrete example that YOU would use
 - Keep it under 100 words
 - Be DIRECT - get to your point quickly
+- NO generic statements - make it distinctly YOUR take
 
-AVOID THESE REPETITIVE PHRASES:
-- "My esteemed colleague(s)"
-- "Esteemed colleagues"
-- "Gentlemen"
-- "Let us embark on a philosophical journey"
-- "In this contemplation"
-- "I propose we reconsider"
-- Any flowery, overly formal openings
+AVOID:
+- Generic arguments anyone could make
+- Flowery, overly formal openings
+- "My esteemed colleague(s)", "Gentlemen", "Let us embark..."
+- Vague philosophical musings
 
-Just speak naturally and make your argument. Start with your actual point, not formal pleasantries.
+FORMATTING:
+- Do NOT wrap your response in quotation marks
 
-## Your Opening Argument:"""
+## Your Opening Argument (make it uniquely {self.name}'s perspective):"""
         else:
+            # Build participants string for the prompt
+            participants_str = ", ".join(participants) if participants else "the other debaters"
+            
             return f"""You are {self.name}, a {self.role}.
 
 ## Your Personality & Speaking Style
@@ -122,33 +147,39 @@ Just speak naturally and make your argument. Start with your actual point, not f
 ## Debate Topic
 "{topic}"
 
-## Previous Arguments
+## Participants You Can Address
+{participants_str}
+(ONLY address people from this list. No one else exists in this debate.)
+
+## What Has Already Been Said
 {history_text}
 
-## Context
-You are in a casual debate with other philosophers. Speak naturally and directly to them.
-
 ## Your Task
-Respond to one of the philosophers above. Challenge their argument or build on it.
+Respond to ONE person above with a FRESH point that NO ONE has made yet.
 
-CRITICAL RULES:
-- Address the philosopher by name (e.g., "Kant, your argument fails because..." or "Mill overlooks...")
-- Pick ONE person to respond to (NOT yourself - you are {self.name})
-- Reference something specific they said
-- Speak in {self.name}'s authentic voice
-- Keep it under 100 words
-- Be DIRECT - challenge or engage immediately
+CRITICAL RULES - READ CAREFULLY:
+1. DO NOT repeat any point already made above - bring something NEW
+2. DO NOT make the same criticism someone else already made
+3. Pick a DIFFERENT angle that reflects YOUR unique perspective as {self.role}
+4. Address ONE person by name: {participants_str}
+5. Challenge something SPECIFIC they said
+6. Keep it under 100 words
 
-AVOID THESE REPETITIVE PHRASES:
-- "My esteemed colleague"
-- "I must challenge your claim"
-- "While I acknowledge"
-- "Let us continue our dialogue"
-- Any flowery, overly formal language
+WHAT MAKES YOU UNIQUE:
+- You are {self.name}, {self.role}
+- Your personality: Think about what YOU specifically would notice that others wouldn't
+- What's YOUR unique take that no one else in this debate would have?
 
-Just speak naturally. Start with your actual disagreement or point, not formal pleasantries.
+AVOID:
+- Repeating points others already made (READ THE PREVIOUS ARGUMENTS)
+- Starting with "{participants[0] if participants else 'Name'}, your optimism..." if someone already said that
+- Generic criticisms - be SPECIFIC and ORIGINAL
+- Flowery language, "my esteemed colleague", etc.
 
-## Your Rebuttal:"""
+FORMATTING:
+- Do NOT wrap your response in quotation marks
+
+## Your Response (must be DIFFERENT from what others said):"""
     
     def generate_vote(self, topic: str, debate_history: list, other_agents: list) -> dict:
         """
@@ -274,30 +305,27 @@ DO NOT write anything else. Just VOTE and REASON."""
         """
         history_text = self._format_history(debate_history)
         
-        prompt = f"""You are {self.name}. You're cross-examining {target_agent} in a debate.
+        prompt = f"""You are {self.name}, {self.role}. You're cross-examining {target_agent}.
 
 TOPIC: "{topic}"
 
 THE DEBATE SO FAR:
 {history_text}
 
-YOUR TASK: Ask {target_agent} ONE tough, pointed question that exposes a weakness or contradiction in their argument.
+YOUR TASK: Ask {target_agent} ONE tough question that reflects YOUR unique perspective as {self.role}.
 
 RULES:
-- Ask a SPECIFIC question about something {target_agent} actually said
-- The question should challenge them, not just ask for clarification
-- Be direct and incisive - this is cross-examination
+- Ask about something SPECIFIC {target_agent} actually said
+- Your question should reflect what YOU as {self.name} would care about
+- Be sharp and incisive - expose a flaw ONLY YOU would notice
 - Keep it under 50 words
-- Address {target_agent} directly
+- Do NOT ask a generic question - make it uniquely YOUR style
 
-Examples of good cross-examination questions:
-- "{target_agent}, you claimed X, but doesn't that directly contradict Y?"
-- "If your principle is true, how do you explain Z?"
-- "You say A, but what happens when B occurs?"
+YOUR UNIQUE ANGLE: Think about what {self.role} would specifically challenge. What would YOU notice that others wouldn't?
 
-DO NOT be polite or formal. Be sharp and probing.
+Do NOT wrap your response in quotation marks.
 
-YOUR QUESTION TO {target_agent}:"""
+YOUR QUESTION:"""
         
         try:
             response = ollama.chat(
@@ -305,7 +333,10 @@ YOUR QUESTION TO {target_agent}:"""
                 messages=[{'role': 'user', 'content': prompt}],
                 options={'temperature': 0.7}
             )
-            return response['message']['content'].strip()
+            result = response['message']['content'].strip()
+            # Remove surrounding quotation marks if present
+            result = result.strip('"\'')
+            return result
         except Exception as e:
             return f"[Error generating question: {str(e)}]"
     
@@ -324,26 +355,25 @@ YOUR QUESTION TO {target_agent}:"""
         """
         history_text = self._format_history(debate_history)
         
-        prompt = f"""You are {self.name}. {questioner} is cross-examining you with a tough question.
+        prompt = f"""You are {self.name}, {self.role}. {questioner} is challenging you.
 
 TOPIC: "{topic}"
 
-THE DEBATE SO FAR:
-{history_text}
-
-{questioner.upper()}'S QUESTION TO YOU:
+{questioner.upper()}'S QUESTION:
 "{question}"
 
-YOUR TASK: Defend your position. Answer the question directly and turn it back on them if possible.
+YOUR TASK: Defend YOUR position in YOUR unique voice as {self.role}.
 
 RULES:
-- Address the specific challenge in their question
-- Defend your position firmly
-- You can counter-attack or point out flaws in THEIR reasoning
+- Answer the specific challenge directly
+- Defend using YOUR characteristic reasoning style
+- Counter-attack in a way that reflects YOUR worldview
 - Keep it under 75 words
-- Be confident, not defensive
+- Be confident and distinctly YOU
 
-DO NOT be evasive. Face the challenge head-on.
+What would {self.name} specifically say? How would {self.role} uniquely respond?
+
+Do NOT wrap your response in quotation marks.
 
 YOUR RESPONSE:"""
         
@@ -353,7 +383,10 @@ YOUR RESPONSE:"""
                 messages=[{'role': 'user', 'content': prompt}],
                 options={'temperature': 0.7}
             )
-            return response['message']['content'].strip()
+            result = response['message']['content'].strip()
+            # Remove surrounding quotation marks if present
+            result = result.strip('"\'')
+            return result
         except Exception as e:
             return f"[Error generating response: {str(e)}]"
     
@@ -370,25 +403,27 @@ YOUR RESPONSE:"""
         """
         history_text = self._format_history(debate_history)
         
-        prompt = f"""You are {self.name}. The debate is ending. Make your closing statement.
+        prompt = f"""You are {self.name}, {self.role}. Make your closing statement.
 
 TOPIC: "{topic}"
 
-THE FULL DEBATE:
+THE DEBATE:
 {history_text}
 
-YOUR TASK: Make a compelling closing argument. This is your last chance to persuade.
+YOUR TASK: Close with YOUR unique perspective as {self.role}. What would ONLY {self.name} say?
 
 RULES:
-- Summarize YOUR strongest point from the debate
-- Address the best counterargument against you and why you still win
-- End with a memorable, punchy conclusion
+- Summarize YOUR strongest point (the one that reflects YOUR worldview)
+- Use YOUR characteristic style and voice
+- End with something memorable that sounds like YOU
 - Keep it under 100 words
-- Speak with conviction - this is your final pitch
+- This should sound distinctly like {self.name}, not generic
 
-DO NOT introduce new arguments. Synthesize and conclude.
+What makes YOUR closing different? What insight would ONLY {self.role} have?
 
-YOUR CLOSING STATEMENT:"""
+Do NOT wrap your response in quotation marks.
+
+YOUR CLOSING:"""
         
         try:
             response = ollama.chat(
@@ -396,7 +431,10 @@ YOUR CLOSING STATEMENT:"""
                 messages=[{'role': 'user', 'content': prompt}],
                 options={'temperature': 0.8}
             )
-            return response['message']['content'].strip()
+            result = response['message']['content'].strip()
+            # Remove surrounding quotation marks if present
+            result = result.strip('"\'')
+            return result
         except Exception as e:
             return f"[Error generating closing: {str(e)}]"
     
