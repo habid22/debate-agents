@@ -1,6 +1,6 @@
-# 🎭 AI Debate Arena
+# discourse — AI Debate Arena
 
-A multi-agent debate system where AI agents with different personalities debate any topic from multiple perspectives. Built with local LLMs (Ollama) - **100% free, no API keys needed**.
+A sophisticated multi-agent debate system where AI agents with distinct personalities engage in structured debates on any topic. Built with local LLMs via Ollama — **100% free, runs entirely on your machine**.
 
 ![AI Debate Arena](https://img.shields.io/badge/AI-Multi--Agent-blue)
 ![Python](https://img.shields.io/badge/Python-3.10+-green)
@@ -9,20 +9,54 @@ A multi-agent debate system where AI agents with different personalities debate 
 
 ## ✨ Features
 
-- **🤖 Multiple AI Agents**: Each agent has a unique personality and perspective
-- **🎯 Real-time Streaming**: Watch arguments appear as they're generated
-- **🏠 100% Local**: Runs entirely on your machine using Ollama
-- **🎨 Beautiful UI**: Modern, animated interface with Tailwind CSS
-- **⚙️ Customizable**: Choose agents, number of rounds, any topic
-- **💰 Free Forever**: No API costs, no subscriptions
+### 🎯 Structured 5-Phase Debates
+- **Opening Statements** — Each agent presents their initial perspective
+- **Rebuttals** — Agents challenge and respond to each other's arguments
+- **Cross-Examination** — Direct questioning between opponents
+- **Closing Statements** — Final arguments and summaries
+- **Voting & Synthesis** — Agents vote for the most compelling argument + moderator synthesis
+
+### 🤖 12 Unique AI Agents
+
+**Modern Perspectives:**
+| Agent | Personality |
+|-------|-------------|
+| 😊 **The Optimist** | Sees possibility where others see problems, champions progress |
+| 🤔 **The Skeptic** | Questions everything, demands evidence over enthusiasm |
+| ⚖️ **The Pragmatist** | Cuts through ideology, focuses on what actually works |
+| 💡 **The Innovator** | Challenges conventions, explores unconventional solutions |
+| 🎖️ **The Veteran** | Pattern recognition from experience, institutional memory |
+| 😈 **The Contrarian** | Attacks consensus, stress-tests ideas |
+
+**Philosophers:**
+| Agent | Perspective |
+|-------|-------------|
+| 📜 **Kant** | Categorical imperative, duty-based ethics |
+| 📊 **Mill** | Utilitarianism, greatest good for greatest number |
+| 🏛️ **Aristotle** | Virtue ethics, the Golden Mean |
+| ⚖️ **Rawls** | Justice as fairness, veil of ignorance |
+| ❓ **Socrates** | Socratic method, probing questions |
+| ⚡ **Nietzsche** | Will to power, challenging moral certainties |
+
+### 🎨 Interactive UI Features
+- **Real-time streaming** — Watch arguments appear as they're generated
+- **Vote & Pin** — Upvote compelling points, pin key insights
+- **Follow-up Questions** — Ask any agent clarifying questions mid-debate
+- **Agent Responses** — Request one agent to respond to another
+- **Save & Export** — Save debates locally, copy as markdown
+- **Keyboard shortcuts** — `Enter` to start, `Esc` to stop
+
+### 💰 100% Free & Private
+- Runs entirely on your machine using Ollama
+- No API keys, no subscriptions, no data leaves your computer
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-1. **Python 3.10+** - [Download](https://python.org)
-2. **Node.js 18+** - [Download](https://nodejs.org)
-3. **Ollama** - [Download](https://ollama.ai)
+1. **Python 3.10+** — [Download](https://python.org)
+2. **Node.js 18+** — [Download](https://nodejs.org)
+3. **Ollama** — [Download](https://ollama.ai)
 
 ### Installation
 
@@ -30,10 +64,12 @@ A multi-agent debate system where AI agents with different personalities debate 
 
 ```bash
 # After installing Ollama from https://ollama.ai, run:
-ollama pull llama3.2:3b
+ollama pull mistral:7b
 ```
 
-This downloads the Llama 3.2 model (~2GB). Only needed once.
+This downloads the Mistral 7B model (~4GB). Only needed once.
+
+> **Tip:** For faster responses on lower-end hardware, use `ollama pull llama3.2:3b`
 
 #### Step 2: Set up the Backend
 
@@ -97,36 +133,41 @@ Go to **http://localhost:3000** and start debating! 🎉
 ## 🎮 Usage
 
 1. **Enter a topic** or click a sample topic
-2. **Select agents** (2-4 agents with different perspectives)
+2. **Select 2-4 agents** — mix and match modern perspectives and philosophers
 3. **Choose rounds** (more rounds = deeper debate)
-4. **Click "Start Debate"** and watch the AI argue!
+4. **Click "Start"** and watch the structured debate unfold
 
-### Available Agents
+### Debate Flow
 
-| Agent | Personality |
-|-------|-------------|
-| 😊 **Alex (Optimist)** | Sees opportunities, focuses on benefits |
-| 🤔 **Morgan (Skeptic)** | Questions everything, focuses on risks |
-| ⚖️ **Jordan (Pragmatist)** | Balances views, focuses on tradeoffs |
-| 💡 **Sam (Innovator)** | Challenges conventions, explores new ideas |
-| 🎖️ **Casey (Veteran)** | Experienced perspective, values lessons learned |
-| 😈 **Riley (Devil's Advocate)** | Challenges the dominant position |
+```
+📢 Opening Statements → ⚔️ Rebuttals → ❓ Cross-Examination → 🎤 Closing → 🗳️ Voting → 📊 Synthesis
+```
+
+### Interactive Controls
+
+| Action | Description |
+|--------|-------------|
+| ↑/↓ | Vote on arguments |
+| 📌 | Pin important insights |
+| 💬 | Ask follow-up questions |
+| ↩ | Request agent-to-agent responses |
+| ⊞/⊟ | Expand/collapse arguments |
 
 ## 📁 Project Structure
 
 ```
 debate-agents/
 ├── backend/
-│   ├── agents.py        # Agent definitions and LLM integration
-│   ├── arena.py         # Debate orchestration logic
-│   ├── server.py        # FastAPI server with streaming
+│   ├── agents.py        # 12 agent definitions + LLM integration
+│   ├── arena.py         # 5-phase debate orchestration
+│   ├── server.py        # FastAPI server with SSE streaming
 │   └── requirements.txt # Python dependencies
 │
 ├── frontend/
 │   ├── app/
-│   │   ├── page.tsx     # Main debate interface
+│   │   ├── page.tsx     # Main debate interface (React + Framer Motion)
 │   │   ├── layout.tsx   # App layout
-│   │   └── globals.css  # Styles
+│   │   └── globals.css  # Tailwind styles
 │   ├── package.json     # Node dependencies
 │   └── ...config files
 │
@@ -140,8 +181,10 @@ debate-agents/
 | `/` | GET | Health check and API info |
 | `/health` | GET | Health status |
 | `/templates` | GET | List available agent templates |
-| `/debate` | POST | Start a streaming debate |
+| `/debate` | POST | Start a streaming debate (SSE) |
 | `/debate/sync` | POST | Start debate (non-streaming) |
+| `/followup` | POST | Ask an agent a follow-up question |
+| `/respond` | POST | Request agent-to-agent response |
 
 ### Example API Request
 
@@ -149,9 +192,9 @@ debate-agents/
 curl -X POST http://localhost:8000/debate \
   -H "Content-Type: application/json" \
   -d '{
-    "topic": "Is remote work better than office work?",
+    "topic": "Should we regulate AI development?",
     "rounds": 2,
-    "agent_templates": ["optimist", "skeptic", "pragmatist"]
+    "agent_templates": ["kant", "mill", "nietzsche"]
   }'
 ```
 
@@ -159,17 +202,18 @@ curl -X POST http://localhost:8000/debate \
 
 ### Using a Different Model
 
-Edit `backend/agents.py` line 19:
+Edit `backend/agents.py` line 25:
 
 ```python
-self.model = "llama3.2:3b"  # Change to any Ollama model
+self.model = "mistral:7b"  # Change to any Ollama model
 ```
 
 Available models:
-- `llama3.2:3b` - Fast, good quality (recommended)
-- `llama3.2:1b` - Faster, lower quality
-- `mistral` - Higher quality, needs more RAM
-- `phi3:mini` - Very fast, compact
+- `mistral:7b` — Default, high quality (recommended)
+- `llama3.2:3b` — Faster, good quality
+- `llama3.2:1b` — Fastest, lower quality
+- `phi3:mini` — Very fast, compact
+- `mixtral:8x7b` — Highest quality, needs more RAM
 
 ### Adjusting Creativity
 
@@ -186,16 +230,17 @@ options={
 
 ### "Connection refused" error
 - Make sure the backend is running on port 8000
-- Check if Ollama is installed and running
+- Check if Ollama is installed and running (`ollama serve`)
 
 ### "Model not found" error
 ```bash
-ollama pull llama3.2:3b
+ollama pull mistral:7b
 ```
 
 ### Slow responses
-- Try a smaller model: `ollama pull llama3.2:1b`
+- Try a smaller model: `ollama pull llama3.2:3b`
 - Close other applications to free up RAM
+- Ensure Ollama is using GPU if available
 
 ### Backend won't start
 - Make sure you're in the `backend` folder
@@ -219,19 +264,25 @@ ollama pull llama3.2:3b
 2. Import to Vercel
 3. Set `NEXT_PUBLIC_API_URL` environment variable to your backend URL
 
+## 🧠 How It Works
+
+1. **Agent System** — Each agent has a unique personality prompt that shapes their reasoning style
+2. **Debate Orchestration** — The arena manages turn-taking, context passing, and phase transitions
+3. **Streaming Responses** — Server-Sent Events (SSE) deliver arguments in real-time
+4. **Local LLM** — Ollama runs the model locally, ensuring privacy and zero cost
+
 ## 📝 License
 
-MIT License - feel free to use this for your portfolio!
+MIT License — feel free to use this for your portfolio, learning, or commercial projects.
 
 ## 🙏 Acknowledgments
 
-- [Ollama](https://ollama.ai) - Local LLM runtime
-- [FastAPI](https://fastapi.tiangolo.com) - Python API framework
-- [Next.js](https://nextjs.org) - React framework
-- [Tailwind CSS](https://tailwindcss.com) - Styling
-- [Framer Motion](https://framer.com/motion) - Animations
+- [Ollama](https://ollama.ai) — Local LLM runtime
+- [FastAPI](https://fastapi.tiangolo.com) — Python API framework
+- [Next.js](https://nextjs.org) — React framework
+- [Tailwind CSS](https://tailwindcss.com) — Utility-first CSS
+- [Framer Motion](https://framer.com/motion) — Animation library
 
 ---
 
-Built with 💜 for learning and portfolio purposes.
-
+Built with 💜 for exploring multi-agent AI systems

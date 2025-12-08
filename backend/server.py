@@ -2,13 +2,14 @@
 FastAPI Server - REST API for the debate system with real-time streaming
 """
 import json
+import re
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from agents import Agent, AGENT_TEMPLATES, create_custom_agent
+from agents import Agent, AGENT_TEMPLATES, create_custom_agent, strip_emojis
 from arena import DebateArena, create_default_debate
 
 
@@ -235,7 +236,11 @@ async def follow_up_question(request: FollowUpRequest):
                 for c in request.context
             ])
         
-        prompt = f"""You are **{agent.name}**, a {agent.role}.
+        prompt = f"""STRICT RULES - FOLLOW EXACTLY:
+- NEVER use emojis or emoticons (no 🚀, no 😊, no 💪, NOTHING)
+- Write naturally like a real conversation
+
+You are {agent.name}, a {agent.role}.
 
 ## Your Personality
 {agent.personality}
@@ -250,9 +255,9 @@ async def follow_up_question(request: FollowUpRequest):
 Someone has asked you: "{request.question}"
 
 ## Your Task
-Answer this follow-up question while staying in character as {agent.name}.
+Answer this follow-up question while staying in character.
 Be specific and provide additional insight or clarification.
-Keep your response under 100 words.
+Keep your response under 100 words. NO emojis.
 
 ## Your Response:"""
         
@@ -264,6 +269,7 @@ Keep your response under 100 words.
                 options={'temperature': 0.8, 'top_p': 0.9}
             )
             message = response['message']['content'].strip()
+            message = strip_emojis(message)  # Remove any emojis
             
             yield f"data: {json.dumps({'type': 'followup', 'agent': agent.name, 'role': agent.role, 'message': message, 'question': request.question})}\n\n"
         except Exception as e:
@@ -300,7 +306,11 @@ async def agent_response(request: AgentResponseRequest):
                 for c in request.context[-5:]  # Last 5 messages for context
             ])
         
-        prompt = f"""You are **{responder.name}**, a {responder.role}.
+        prompt = f"""STRICT RULES - FOLLOW EXACTLY:
+- NEVER use emojis or emoticons (no 🚀, no 😊, no 💪, NOTHING)
+- Write naturally like a real conversation
+
+You are {responder.name}, a {responder.role}.
 
 ## Your Personality
 {responder.personality}
@@ -316,9 +326,9 @@ async def agent_response(request: AgentResponseRequest):
 
 ## Your Task
 Respond directly to {request.target_agent}'s argument above.
-Stay in character as {responder.name}.
+Stay in character.
 Be specific - either support, challenge, or add nuance to their point.
-Keep your response under 100 words.
+Keep your response under 100 words. NO emojis.
 
 ## Your Response to {request.target_agent}:"""
         
@@ -330,6 +340,7 @@ Keep your response under 100 words.
                 options={'temperature': 0.8, 'top_p': 0.9}
             )
             message = response['message']['content'].strip()
+            message = strip_emojis(message)  # Remove any emojis
             
             yield f"data: {json.dumps({'type': 'response', 'agent': responder.name, 'role': responder.role, 'message': message, 'responding_to': request.target_agent})}\n\n"
         except Exception as e:

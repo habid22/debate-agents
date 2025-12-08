@@ -315,7 +315,9 @@ IMPORTANT FORMATTING RULES:
 - Use EXACTLY these section names with **bold** formatting
 - Do NOT use numbered lists (1., 2., 3.) before section headers
 - Each section should have a few sentences or bullet points
-- Be concise but thorough. Around 150 words total."""
+- Be concise but thorough. Around 150 words total.
+- NO emojis or emoticons
+- Write in a neutral, analytical tone"""
 
         try:
             response = ollama.chat(

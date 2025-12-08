@@ -47,12 +47,12 @@ interface PinnedPoint {
 // Agent template mapping
 const agentTemplates: Record<string, string> = {
   // Modern agents
-  Alex: "optimist",
-  Morgan: "skeptic",
-  Jordan: "pragmatist",
-  Sam: "innovator",
-  Casey: "veteran",
-  Riley: "devils_advocate",
+  "The Optimist": "optimist",
+  "The Skeptic": "skeptic",
+  "The Pragmatist": "pragmatist",
+  "The Innovator": "innovator",
+  "The Veteran": "veteran",
+  "The Contrarian": "devils_advocate",
   // Philosophers
   Kant: "kant",
   Mill: "mill",
@@ -65,12 +65,12 @@ const agentTemplates: Record<string, string> = {
 // Agent color mapping
 const agentColors: Record<string, { bg: string; text: string; border: string }> = {
   // Modern agents
-  Alex: { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-l-emerald-500" },
-  Morgan: { bg: "bg-red-500/10", text: "text-red-400", border: "border-l-red-500" },
-  Jordan: { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-l-blue-500" },
-  Sam: { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-l-amber-500" },
-  Casey: { bg: "bg-purple-500/10", text: "text-purple-400", border: "border-l-purple-500" },
-  Riley: { bg: "bg-pink-500/10", text: "text-pink-400", border: "border-l-pink-500" },
+  "The Optimist": { bg: "bg-emerald-500/10", text: "text-emerald-400", border: "border-l-emerald-500" },
+  "The Skeptic": { bg: "bg-red-500/10", text: "text-red-400", border: "border-l-red-500" },
+  "The Pragmatist": { bg: "bg-blue-500/10", text: "text-blue-400", border: "border-l-blue-500" },
+  "The Innovator": { bg: "bg-amber-500/10", text: "text-amber-400", border: "border-l-amber-500" },
+  "The Veteran": { bg: "bg-purple-500/10", text: "text-purple-400", border: "border-l-purple-500" },
+  "The Contrarian": { bg: "bg-pink-500/10", text: "text-pink-400", border: "border-l-pink-500" },
   // Philosophers - distinct colors spread across the spectrum
   Kant: { bg: "bg-indigo-500/10", text: "text-indigo-400", border: "border-l-indigo-500" },      // Deep blue-purple
   Mill: { bg: "bg-yellow-500/10", text: "text-yellow-400", border: "border-l-yellow-500" },      // Bright yellow
@@ -883,12 +883,12 @@ export default function Home() {
             </label>
             <div className="flex flex-wrap gap-2">
               {Object.entries({
-                optimist: { name: "Alex", label: "Optimist" },
-                skeptic: { name: "Morgan", label: "Skeptic" },
-                pragmatist: { name: "Jordan", label: "Pragmatist" },
-                innovator: { name: "Sam", label: "Innovator" },
-                veteran: { name: "Casey", label: "Veteran" },
-                devils_advocate: { name: "Riley", label: "Contrarian" },
+                optimist: { name: "The Optimist", label: "Optimist" },
+                skeptic: { name: "The Skeptic", label: "Skeptic" },
+                pragmatist: { name: "The Pragmatist", label: "Pragmatist" },
+                innovator: { name: "The Innovator", label: "Innovator" },
+                veteran: { name: "The Veteran", label: "Veteran" },
+                devils_advocate: { name: "The Contrarian", label: "Contrarian" },
               }).map(([key, { name, label }]) => {
                 const isSelected = selectedTemplates.includes(key);
                 const colors = getAgentColor(name);
