@@ -28,15 +28,15 @@ A sophisticated multi-agent debate system where AI agents with distinct personal
 | 🎖️ **The Veteran** | Pattern recognition from experience, institutional memory |
 | 😈 **The Contrarian** | Attacks consensus, stress-tests ideas |
 
-**Philosophers:**
-| Agent | Perspective |
-|-------|-------------|
-| 📜 **Kant** | Categorical imperative, duty-based ethics |
-| 📊 **Mill** | Utilitarianism, greatest good for greatest number |
-| 🏛️ **Aristotle** | Virtue ethics, the Golden Mean |
-| ⚖️ **Rawls** | Justice as fairness, veil of ignorance |
-| ❓ **Socrates** | Socratic method, probing questions |
-| ⚡ **Nietzsche** | Will to power, challenging moral certainties |
+**Philosophers (4 Core Ethical Frameworks + 2 Wildcards):**
+| Agent | Framework | Core Question |
+|-------|-----------|---------------|
+| 📜 **Kant** | Deontologist | "Can this be a universal moral law?" |
+| 📊 **Mill** | Utilitarian | "Does this maximize overall wellbeing?" |
+| 🏛️ **Aristotle** | Virtue Ethicist | "What would a person of good character do?" |
+| ⚖️ **Rawls** | Justice Theorist | "Is this fair behind a veil of ignorance?" |
+| ❓ **Socrates** | Dialectician | Probes assumptions through questioning |
+| ⚡ **Nietzsche** | Existentialist | Challenges all moral frameworks |
 
 ### 🎨 Interactive UI Features
 - **Real-time streaming** — Watch arguments appear as they're generated
