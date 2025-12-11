@@ -70,6 +70,15 @@ class DebateRequest(BaseModel):
     )
 
 
+class PhaseRequest(BaseModel):
+    """Request to run a single phase of a debate."""
+    topic: str = Field(..., description="The debate topic")
+    rounds: int = Field(default=2, ge=1, le=5, description="Total number of debate rounds")
+    phase: str = Field(..., description="Which phase to run (opening, rebuttal_2, cross_exam, closing, voting, synthesis)")
+    agent_templates: Optional[list[str]] = Field(default=None, description="List of agent template names")
+    history: Optional[list[dict]] = Field(default=[], description="Previous debate history")
+
+
 class DebateHistoryResponse(BaseModel):
     """Response containing debate history."""
     topic: str
@@ -210,6 +219,50 @@ async def start_debate_sync(request: DebateRequest):
         "rounds": request.rounds,
         "events": results
     }
+
+
+@app.post("/debate/phase")
+async def run_debate_phase(request: PhaseRequest):
+    """
+    Run a single phase of a debate.
+    Allows frontend to control pace - user clicks to proceed between phases.
+    """
+    
+    def generate_stream():
+        from agents import get_template_agent
+        
+        # Create the arena
+        arena = DebateArena(topic=request.topic, rounds=request.rounds)
+        
+        # Add agents
+        if request.agent_templates:
+            for template_name in request.agent_templates:
+                try:
+                    arena.add_agent(get_template_agent(template_name))
+                except ValueError as e:
+                    yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                    return
+        else:
+            arena.add_agent(get_template_agent("optimist"))
+            arena.add_agent(get_template_agent("skeptic"))
+            arena.add_agent(get_template_agent("pragmatist"))
+        
+        # Run just this phase
+        for entry in arena.run_single_phase(request.phase, request.history or []):
+            yield f"data: {json.dumps(entry)}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    )
+
+
+@app.get("/debate/phases")
+async def get_debate_phases(rounds: int = 2):
+    """Get the list of phases for a debate with the given number of rounds."""
+    arena = DebateArena(topic="", rounds=rounds)
+    return {"phases": arena.get_all_phases()}
 
 
 @app.post("/followup")

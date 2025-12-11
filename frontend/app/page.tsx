@@ -487,6 +487,14 @@ export default function Home() {
   const [respondingAgent, setRespondingAgent] = useState<string>("");
   const [isInteractionLoading, setIsInteractionLoading] = useState(false);
   
+  // Phase control - pause between rounds/phases
+  const [isPaused, setIsPaused] = useState(false);
+  const [currentPhaseName, setCurrentPhaseName] = useState<string>("");
+  const [nextPhaseName, setNextPhaseName] = useState<string>("");
+  const [debateHistory, setDebateHistory] = useState<Record<string, unknown>[]>([]);
+  const [phaseQueue, setPhaseQueue] = useState<string[]>([]);
+  const [currentPhaseIndex, setCurrentPhaseIndex] = useState(0);
+  
   const debateEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -503,6 +511,123 @@ export default function Home() {
     debateEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [debates]);
 
+  // Stop debate handler (defined early for keyboard shortcuts)
+  const stopDebate = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    setPhaseQueue([]);
+    setIsPaused(false);
+  }, []);
+  
+  // Run a single phase
+  const runPhase = useCallback(async (phase: string, history: Record<string, unknown>[]) => {
+    abortControllerRef.current = new AbortController();
+    
+    try {
+      const response = await fetch("http://localhost:8000/debate/phase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic,
+          rounds,
+          phase,
+          agent_templates: selectedTemplates,
+          history,
+        }),
+        signal: abortControllerRef.current.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to run phase");
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let newHistory = [...history];
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              
+              // Update phase name from round_start events
+              if (data.type === "round_start") {
+                setCurrentRound(Number(data.round) || 0);
+                setCurrentPhaseName(data.phase || `Round ${data.round}`);
+              }
+              
+              // Capture history from phase_complete
+              if (data.type === "phase_complete") {
+                newHistory = data.history || newHistory;
+                continue; // Don't add this to debates
+              }
+              
+              setDebates((prev) => [...prev, data]);
+            } catch (e) {
+              console.error("Failed to parse:", line);
+            }
+          }
+        }
+      }
+      
+      return newHistory;
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") {
+        throw err; // Re-throw abort errors
+      }
+      throw err;
+    }
+  }, [topic, rounds, selectedTemplates]);
+
+  // Handle proceeding to next phase
+  const proceedToNextPhase = useCallback(async () => {
+    if (currentPhaseIndex >= phaseQueue.length) return;
+    
+    setIsPaused(false);
+    const nextPhase = phaseQueue[currentPhaseIndex];
+    
+    try {
+      const newHistory = await runPhase(nextPhase, debateHistory);
+      setDebateHistory(newHistory);
+      setCurrentPhaseIndex((prev) => prev + 1);
+      
+      // Check if there are more phases
+      if (currentPhaseIndex + 1 < phaseQueue.length) {
+        // Pause before next phase
+        const upcomingPhase = phaseQueue[currentPhaseIndex + 1];
+        setNextPhaseName(getPhaseDisplayName(upcomingPhase));
+        setIsPaused(true);
+      } else {
+        // Debate complete
+        setIsLoading(false);
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name !== "AbortError") {
+        setError(err.message);
+      }
+      setIsLoading(false);
+    }
+  }, [currentPhaseIndex, phaseQueue, debateHistory, runPhase]);
+  
+  // Helper to get display name for a phase
+  const getPhaseDisplayName = (phase: string): string => {
+    if (phase === "opening") return "Opening Statements";
+    if (phase.startsWith("rebuttal_")) return `Rebuttal Round ${parseInt(phase.split("_")[1]) - 1}`;
+    if (phase === "cross_exam") return "Cross-Examination";
+    if (phase === "closing") return "Closing Statements";
+    if (phase === "voting") return "Voting";
+    if (phase === "synthesis") return "Synthesis";
+    return phase;
+  };
+
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -511,10 +636,19 @@ export default function Home() {
         if (followUpAgent) setFollowUpAgent(null);
         if (respondToEntry) setRespondToEntry(null);
       }
+      // Space or Enter to proceed when paused (and not typing in an input)
+      if ((e.key === " " || e.key === "Enter") && isPaused && isLoading) {
+        const activeElement = document.activeElement;
+        const isInput = activeElement?.tagName === "INPUT" || activeElement?.tagName === "TEXTAREA";
+        if (!isInput) {
+          e.preventDefault();
+          proceedToNextPhase();
+        }
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isLoading, followUpAgent, respondToEntry]);
+  }, [isLoading, followUpAgent, respondToEntry, isPaused, proceedToNextPhase, stopDebate]);
 
   const startDebate = async () => {
     if (!topic.trim()) {
@@ -529,68 +663,40 @@ export default function Home() {
     setCollapsedMessages(new Set());
     setVotes({});
     setPinnedPoints([]);
+    setIsPaused(false);
+    setCurrentPhaseName("");
+    setNextPhaseName("");
+    setDebateHistory([]);
+    setCurrentPhaseIndex(0);
 
-    abortControllerRef.current = new AbortController();
+    // Build the phase queue based on number of rounds
+    const phases = ["opening"];
+    for (let i = 2; i <= rounds; i++) {
+      phases.push(`rebuttal_${i}`);
+    }
+    phases.push("cross_exam", "closing", "voting", "synthesis");
+    setPhaseQueue(phases);
 
+    // Run the first phase (opening)
     try {
-      const response = await fetch("http://localhost:8000/debate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          topic,
-          rounds,
-          agent_templates: selectedTemplates,
-        }),
-        signal: abortControllerRef.current.signal,
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to start debate");
-      }
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-
-      while (reader) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              
-              if (data.type === "round_start") {
-                setCurrentRound(data.round);
-              }
-              
-              setDebates((prev) => [...prev, data]);
-            } catch (e) {
-              console.error("Failed to parse:", line);
-            }
-          }
-        }
+      const newHistory = await runPhase("opening", []);
+      setDebateHistory(newHistory);
+      setCurrentPhaseIndex(1);
+      
+      // If there are more phases, pause
+      if (phases.length > 1) {
+        setNextPhaseName(getPhaseDisplayName(phases[1]));
+        setIsPaused(true);
+      } else {
+        setIsLoading(false);
       }
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
-        // Debate was cancelled
-      } else {
-      setError(err instanceof Error ? err.message : "Something went wrong");
+      if (err instanceof Error && err.name !== "AbortError") {
+        setError(err.message);
       }
-    } finally {
       setIsLoading(false);
-      abortControllerRef.current = null;
     }
   };
-
-  const stopDebate = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-  }, []);
 
   const toggleTemplate = (template: string) => {
     setSelectedTemplates((prev) => {
@@ -854,7 +960,8 @@ export default function Home() {
             </div>
             <p className="text-xs text-neutral-700 mt-2">
               Press <kbd className="px-1.5 py-0.5 bg-neutral-900 rounded text-neutral-500">Enter</kbd> to start
-              {isLoading && <>, <kbd className="px-1.5 py-0.5 bg-neutral-900 rounded text-neutral-500">Esc</kbd> to stop</>}
+              {isLoading && !isPaused && <>, <kbd className="px-1.5 py-0.5 bg-neutral-900 rounded text-neutral-500">Esc</kbd> to stop</>}
+              {isPaused && <>, <kbd className="px-1.5 py-0.5 bg-neutral-900 rounded text-neutral-500">Space</kbd> to proceed</>}
             </p>
           </div>
 
@@ -1220,7 +1327,11 @@ export default function Home() {
                   {debates.find((d) => d.type === "start")?.topic || topic}
                 </h2>
                 <p className="text-xs text-neutral-500 mt-1">
-                  {isLoading ? `Round ${currentRound}` : "Complete"}
+                  {isLoading 
+                    ? isPaused 
+                      ? <span className="text-amber-400">Paused — waiting to proceed</span>
+                      : `Round ${currentRound}${currentPhaseName ? ` · ${currentPhaseName}` : ''}`
+                    : "Complete"}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -1469,8 +1580,31 @@ export default function Home() {
                 })}
               </AnimatePresence>
 
+              {/* Proceed to Next Phase Button */}
+              {isPaused && isLoading && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-col items-center gap-3 p-6 border border-dashed border-neutral-700 rounded-md bg-neutral-900/50"
+                >
+                  <p className="text-neutral-400 text-sm">
+                    Ready to proceed to <span className="text-white font-medium">{nextPhaseName}</span>
+                  </p>
+                  <button
+                    onClick={proceedToNextPhase}
+                    className="px-6 py-3 bg-white text-black hover:bg-neutral-200 rounded-md font-medium transition-colors flex items-center gap-2"
+                  >
+                    Continue to {nextPhaseName}
+                    <span>→</span>
+                  </button>
+                  <p className="text-neutral-600 text-xs">
+                    Phase {currentPhaseIndex + 1} of {phaseQueue.length}
+                  </p>
+                </motion.div>
+              )}
+
               {/* Loading Indicator */}
-              {isLoading && (
+              {isLoading && !isPaused && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}

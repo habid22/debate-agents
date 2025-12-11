@@ -2,12 +2,20 @@
 Debate Arena Module - Orchestrates multi-agent debates
 """
 import ollama
-from typing import Generator
+from typing import Generator, Optional
 from agents import Agent, get_template_agent
 
 
 class DebateArena:
     """Orchestrates a debate between multiple AI agents."""
+    
+    # Phase constants
+    PHASE_OPENING = "opening"
+    PHASE_REBUTTAL = "rebuttal"  # rebuttal_2, rebuttal_3, etc.
+    PHASE_CROSS_EXAM = "cross_exam"
+    PHASE_CLOSING = "closing"
+    PHASE_VOTING = "voting"
+    PHASE_SYNTHESIS = "synthesis"
     
     def __init__(self, topic: str, rounds: int = 3):
         """
@@ -22,6 +30,8 @@ class DebateArena:
         self.agents: list[Agent] = []
         self.history: list[dict] = []
         self.is_running = False
+        self.current_phase: Optional[str] = None
+        self.current_round: int = 0
     
     def add_agent(self, agent: Agent) -> None:
         """Add an agent to the debate."""
@@ -159,6 +169,108 @@ class DebateArena:
             "total_arguments": len(self.history)
         }
         
+        self.is_running = False
+    
+    def get_all_phases(self) -> list[str]:
+        """Get list of all phases for this debate configuration."""
+        phases = [self.PHASE_OPENING]
+        for i in range(2, self.rounds + 1):
+            phases.append(f"{self.PHASE_REBUTTAL}_{i}")
+        phases.extend([
+            self.PHASE_CROSS_EXAM,
+            self.PHASE_CLOSING,
+            self.PHASE_VOTING,
+            self.PHASE_SYNTHESIS
+        ])
+        return phases
+    
+    def run_single_phase(self, phase: str, history: list[dict] = None) -> Generator[dict, None, None]:
+        """
+        Run a single phase of the debate.
+        
+        Args:
+            phase: Which phase to run (opening, rebuttal_2, cross_exam, closing, voting, synthesis)
+            history: Previous debate history to continue from
+            
+        Yields:
+            Events for this phase only
+        """
+        if len(self.agents) < 2:
+            yield {"type": "error", "message": "Need at least 2 agents for a debate"}
+            return
+        
+        # Restore history if provided
+        if history:
+            self.history = history
+        
+        self.is_running = True
+        self.current_phase = phase
+        
+        # Announce start if this is the first phase
+        if phase == self.PHASE_OPENING:
+            yield {
+                "type": "start",
+                "topic": self.topic,
+                "agents": [a.to_dict() for a in self.agents],
+                "rounds": self.rounds
+            }
+        
+        # Run the appropriate phase
+        if phase == self.PHASE_OPENING:
+            # Round 1 - Opening Statements
+            yield {"type": "round_start", "round": 1, "phase": "Opening Statements"}
+            for agent in self.agents:
+                message = agent.generate_response(self.topic, self.history, round_num=1)
+                entry = {
+                    "type": "argument", "round": 1, "phase": "Opening Statements",
+                    "agent": agent.name, "role": agent.role, "message": message
+                }
+                self.history.append(entry)
+                yield entry
+                
+        elif phase.startswith(self.PHASE_REBUTTAL):
+            # Rebuttal rounds (round 2, 3, etc.)
+            round_num = int(phase.split("_")[1])
+            phase_name = f"Rebuttal Round {round_num - 1}"
+            yield {"type": "round_start", "round": round_num, "phase": phase_name}
+            for agent in self.agents:
+                message = agent.generate_response(self.topic, self.history, round_num=round_num)
+                entry = {
+                    "type": "argument", "round": round_num, "phase": phase_name,
+                    "agent": agent.name, "role": agent.role, "message": message
+                }
+                self.history.append(entry)
+                yield entry
+                
+        elif phase == self.PHASE_CROSS_EXAM:
+            yield {"type": "cross_exam_start", "message": "Cross-Examination: Each debater will ask a pointed question to challenge an opponent."}
+            for entry in self._run_cross_examination():
+                self.history.append(entry)
+                yield entry
+                
+        elif phase == self.PHASE_CLOSING:
+            yield {"type": "closing_start", "message": "Closing Statements: Each debater makes their final argument."}
+            for agent in self.agents:
+                closing = agent.generate_closing_statement(self.topic, self.history)
+                entry = {"type": "closing", "agent": agent.name, "role": agent.role, "message": closing}
+                self.history.append(entry)
+                yield entry
+                
+        elif phase == self.PHASE_VOTING:
+            yield {"type": "voting_start", "message": "Voting: Each debater votes for the most compelling argument."}
+            votes = self._run_voting_round()
+            for vote_entry in votes:
+                yield vote_entry
+            vote_tally = self._tally_votes(votes)
+            yield {"type": "voting_results", "tally": vote_tally, "message": self._format_voting_results(vote_tally)}
+            
+        elif phase == self.PHASE_SYNTHESIS:
+            synthesis = self._generate_synthesis()
+            yield {"type": "synthesis", "round": "final", "agent": "Moderator", "role": "Synthesis", "message": synthesis}
+            yield {"type": "end", "total_arguments": len(self.history)}
+        
+        # Signal phase complete
+        yield {"type": "phase_complete", "phase": phase, "history": self.history}
         self.is_running = False
     
     def _run_cross_examination(self) -> list:
